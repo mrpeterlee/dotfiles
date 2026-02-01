@@ -85,6 +85,13 @@ sudo pacman -Syu --noconfirm --needed \
     fuse2
 
 {{ else if eq .pkgmgr "dnf" -}}
+# Detect if we're on Amazon Linux
+IS_AMAZON_LINUX=false
+if grep -q "Amazon Linux" /etc/os-release 2>/dev/null; then
+    IS_AMAZON_LINUX=true
+fi
+
+# Install base packages available on all dnf systems
 sudo dnf install -y \
     zsh \
     tmux \
@@ -94,13 +101,65 @@ sudo dnf install -y \
     jq \
     tree \
     htop \
-    ripgrep \
-    fd-find \
-    bat \
-    zoxide \
     unzip \
-    ShellCheck \
-    fuse
+    fuse \
+    tar \
+    gzip
+
+if [[ "$IS_AMAZON_LINUX" == "true" ]]; then
+    echo "==> Amazon Linux detected, installing tools from alternative sources..."
+    mkdir -p ~/.local/bin
+
+    # Install ripgrep from GitHub releases
+    if ! command -v rg &>/dev/null; then
+        echo "Installing ripgrep..."
+        RG_VERSION=$(curl -sL "https://api.github.com/repos/BurntSushi/ripgrep/releases/latest" | jq -r '.tag_name')
+        curl -sL "https://github.com/BurntSushi/ripgrep/releases/download/${RG_VERSION}/ripgrep-${RG_VERSION}-x86_64-unknown-linux-musl.tar.gz" | tar xz -C /tmp
+        cp /tmp/ripgrep-${RG_VERSION}-x86_64-unknown-linux-musl/rg ~/.local/bin/
+        rm -rf /tmp/ripgrep-${RG_VERSION}-x86_64-unknown-linux-musl
+    fi
+
+    # Install fd from GitHub releases
+    if ! command -v fd &>/dev/null; then
+        echo "Installing fd..."
+        FD_VERSION=$(curl -sL "https://api.github.com/repos/sharkdp/fd/releases/latest" | jq -r '.tag_name')
+        curl -sL "https://github.com/sharkdp/fd/releases/download/${FD_VERSION}/fd-${FD_VERSION}-x86_64-unknown-linux-musl.tar.gz" | tar xz -C /tmp
+        cp /tmp/fd-${FD_VERSION}-x86_64-unknown-linux-musl/fd ~/.local/bin/
+        rm -rf /tmp/fd-${FD_VERSION}-x86_64-unknown-linux-musl
+    fi
+
+    # Install bat from GitHub releases
+    if ! command -v bat &>/dev/null; then
+        echo "Installing bat..."
+        BAT_VERSION=$(curl -sL "https://api.github.com/repos/sharkdp/bat/releases/latest" | jq -r '.tag_name')
+        curl -sL "https://github.com/sharkdp/bat/releases/download/${BAT_VERSION}/bat-${BAT_VERSION}-x86_64-unknown-linux-musl.tar.gz" | tar xz -C /tmp
+        cp /tmp/bat-${BAT_VERSION}-x86_64-unknown-linux-musl/bat ~/.local/bin/
+        rm -rf /tmp/bat-${BAT_VERSION}-x86_64-unknown-linux-musl
+    fi
+
+    # Install zoxide from GitHub releases
+    if ! command -v zoxide &>/dev/null; then
+        echo "Installing zoxide..."
+        curl -sSfL https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | sh
+    fi
+
+    # Install shellcheck from GitHub releases
+    if ! command -v shellcheck &>/dev/null; then
+        echo "Installing shellcheck..."
+        SC_VERSION=$(curl -sL "https://api.github.com/repos/koalaman/shellcheck/releases/latest" | jq -r '.tag_name')
+        curl -sL "https://github.com/koalaman/shellcheck/releases/download/${SC_VERSION}/shellcheck-${SC_VERSION}.linux.x86_64.tar.xz" | tar xJ -C /tmp
+        cp /tmp/shellcheck-${SC_VERSION}/shellcheck ~/.local/bin/
+        rm -rf /tmp/shellcheck-${SC_VERSION}
+    fi
+else
+    # Standard Fedora/RHEL with full package availability
+    sudo dnf install -y \
+        ripgrep \
+        fd-find \
+        bat \
+        zoxide \
+        ShellCheck
+fi
 
 {{ end -}}
 
