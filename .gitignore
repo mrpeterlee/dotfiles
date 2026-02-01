@@ -1,0 +1,34 @@
+# Chezmoi state (don't track)
+.chezmoistate.boltdb
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Editor artifacts
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Temporary files
+*.tmp
+*.bak
+*.log
+
+# Cache files
+*.zwc
+.zcompdump*
+
+# Python
+*.pyc
+__pycache__/
+
+# Secrets (never commit)
+*.secret*
+*secret*.zsh
+.secrets.local.zsh
+.env
+.env.*
+credentials*

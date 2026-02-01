@@ -1,0 +1,64 @@
+# TPM (Tmux Plugin Manager)
+[".local/share/tmux/plugins/tpm"]
+    type = "git-repo"
+    url = "https://github.com/tmux-plugins/tpm.git"
+    refreshPeriod = "168h"
+    [".local/share/tmux/plugins/tpm".pull]
+        args = ["--ff-only"]
+
+# Zinit (Zsh plugin manager)
+[".local/share/zinit/zinit.git"]
+    type = "git-repo"
+    url = "https://github.com/zdharma-continuum/zinit.git"
+    refreshPeriod = "168h"
+    [".local/share/zinit/zinit.git".pull]
+        args = ["--ff-only"]
+
+# Lazy.nvim (Neovim plugin manager)
+[".local/share/nvim/lazy/lazy.nvim"]
+    type = "git-repo"
+    url = "https://github.com/folke/lazy.nvim.git"
+    refreshPeriod = "168h"
+    [".local/share/nvim/lazy/lazy.nvim".clone]
+        args = ["--filter=blob:none", "--branch=stable"]
+
+{{ if and (eq .chezmoi.os "linux") (eq .chezmoi.arch "amd64") -}}
+# fzf binary - Linux amd64
+[".local/bin/fzf"]
+    type = "archive-file"
+    url = "https://github.com/junegunn/fzf/releases/download/v0.60.0/fzf-0.60.0-linux_amd64.tar.gz"
+    path = "fzf"
+    refreshPeriod = "720h"
+    executable = true
+
+# Neovim AppImage - Linux amd64
+[".local/bin/nvim.appimage"]
+    type = "file"
+    url = "https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.appimage"
+    refreshPeriod = "168h"
+    executable = true
+{{ end -}}
+
+{{ if and (eq .chezmoi.os "linux") (eq .chezmoi.arch "arm64") -}}
+# fzf binary - Linux arm64
+[".local/bin/fzf"]
+    type = "archive-file"
+    url = "https://github.com/junegunn/fzf/releases/download/v0.60.0/fzf-0.60.0-linux_arm64.tar.gz"
+    path = "fzf"
+    refreshPeriod = "720h"
+    executable = true
+{{ end -}}
+
+{{ if eq .chezmoi.os "darwin" -}}
+# fzf binary - macOS (handled by Homebrew, but fallback)
+[".local/bin/fzf"]
+    type = "archive-file"
+    {{ if eq .chezmoi.arch "arm64" -}}
+    url = "https://github.com/junegunn/fzf/releases/download/v0.60.0/fzf-0.60.0-darwin_arm64.zip"
+    {{ else -}}
+    url = "https://github.com/junegunn/fzf/releases/download/v0.60.0/fzf-0.60.0-darwin_amd64.zip"
+    {{ end -}}
+    path = "fzf"
+    refreshPeriod = "720h"
+    executable = true
+{{ end -}}

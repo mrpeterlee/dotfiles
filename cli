@@ -1,0 +1,847 @@
+#!/usr/bin/env bash
+#
+# cli - Manage dotfiles with chezmoi
+#
+# Usage:
+#   cli <command> [options]
+#
+# Commands:
+#   prereq      Install/update prerequisites (curl, git, op, etc.)
+#   install     Install dotfiles on a new machine
+#   reinstall   Force reinstall (removes state and reapplies)
+#   uninstall   Remove all chezmoi-managed files
+#   status      Show current installation status
+#   help        Show this help message
+#
+# Examples:
+#   cli prereq           # Install missing prerequisites
+#   cli prereq --update  # Update all prerequisites
+#   cli install          # First-time setup
+#   cli reinstall        # Fix broken installation
+#   cli uninstall        # Remove everything
+#   cli status           # Check what's installed
+#
+# Environment Variables:
+#   CHEZMOI_REPO    Override the GitHub repo (default: MrPeterLee/dotfiles)
+#   DOTFILES_DEBUG  Set to 1 for verbose output
+#
+set -euo pipefail
+
+# Configuration
+REPO="${CHEZMOI_REPO:-MrPeterLee/dotfiles}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CHEZMOI_BIN="${HOME}/.local/bin/chezmoi"
+CHEZMOI_SOURCE="${HOME}/.local/share/chezmoi"
+CHEZMOI_CONFIG_DIR="${HOME}/.config/chezmoi"
+
+# Colors (disabled if not a terminal)
+if [[ -t 1 ]]; then
+    RED='\033[0;31m'
+    GREEN='\033[0;32m'
+    YELLOW='\033[0;33m'
+    BLUE='\033[0;34m'
+    BOLD='\033[1m'
+    RESET='\033[0m'
+else
+    RED='' GREEN='' YELLOW='' BLUE='' BOLD='' RESET=''
+fi
+
+# Logging functions
+info() { echo -e "${BLUE}==>${RESET} $*"; }
+success() { echo -e "${GREEN}✓${RESET} $*"; }
+warn() { echo -e "${YELLOW}!${RESET} $*"; }
+error() { echo -e "${RED}✗${RESET} $*" >&2; }
+debug() { [[ "${DOTFILES_DEBUG:-}" == "1" ]] && echo -e "${YELLOW}[debug]${RESET} $*" || true; }
+
+# Find or install chezmoi
+ensure_chezmoi() {
+    if command -v chezmoi &>/dev/null; then
+        CHEZMOI="chezmoi"
+        return 0
+    elif [[ -x "$CHEZMOI_BIN" ]]; then
+        CHEZMOI="$CHEZMOI_BIN"
+        return 0
+    fi
+
+    info "Installing chezmoi..."
+    sh -c "$(curl -fsLS get.chezmoi.io)" -- -b ~/.local/bin
+    CHEZMOI="$CHEZMOI_BIN"
+    success "chezmoi installed"
+}
+
+# Check if running from local source
+is_local_source() {
+    [[ -f "${SCRIPT_DIR}/.chezmoi.toml.tmpl" ]]
+}
+
+# Create default config for non-interactive mode
+create_default_config() {
+    mkdir -p "$CHEZMOI_CONFIG_DIR"
+    cat > "${CHEZMOI_CONFIG_DIR}/chezmoi.toml" <<EOF
+[data]
+    email = "peter.lee@astrocapital.net"
+    name = "Peter Lee"
+    hostname = "$(hostname)"
+    personal = true
+    osid = "$(uname -s | tr '[:upper:]' '[:lower:]')"
+    arch = "$(uname -m | sed 's/x86_64/amd64/')"
+    isWSL = $(test -f /proc/sys/fs/binfmt_misc/WSLInterop && echo true || echo false)
+    isDarwin = $(test "$(uname -s)" = "Darwin" && echo true || echo false)
+    isLinux = $(test "$(uname -s)" = "Linux" && echo true || echo false)
+    isWindows = false
+    pkgmgr = "$(command -v pacman >/dev/null && echo pacman || (command -v brew >/dev/null && echo brew || echo apt))"
+    hasOp = $(command -v op >/dev/null && echo true || echo false)
+EOF
+}
+
+# ============================================================================
+# Platform Detection
+# ============================================================================
+
+detect_platform() {
+    OS="$(uname -s)"
+    ARCH="$(uname -m)"
+    IS_WSL=false
+    IS_DARWIN=false
+    IS_LINUX=false
+    PKGMGR=""
+    DISTRO=""
+
+    case "$OS" in
+        Darwin)
+            IS_DARWIN=true
+            PKGMGR="brew"
+            DISTRO="macos"
+            ;;
+        Linux)
+            IS_LINUX=true
+            # Check for WSL
+            if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]] || grep -qi microsoft /proc/version 2>/dev/null; then
+                IS_WSL=true
+            fi
+            # Detect distro and package manager
+            if [[ -f /etc/os-release ]]; then
+                . /etc/os-release
+                DISTRO="${ID:-unknown}"
+                case "$ID" in
+                    ubuntu|debian|pop|linuxmint|elementary|zorin)
+                        PKGMGR="apt"
+                        ;;
+                    amzn|amazonlinux|fedora|rhel|centos|rocky|almalinux)
+                        PKGMGR="dnf"
+                        # Amazon Linux 2 uses yum
+                        if [[ "$VERSION_ID" == "2" ]] && command -v yum &>/dev/null && ! command -v dnf &>/dev/null; then
+                            PKGMGR="yum"
+                        fi
+                        ;;
+                    arch|manjaro|endeavouros)
+                        PKGMGR="pacman"
+                        ;;
+                    opensuse*|sles)
+                        PKGMGR="zypper"
+                        ;;
+                    *)
+                        # Fallback detection
+                        if command -v apt &>/dev/null; then
+                            PKGMGR="apt"
+                        elif command -v dnf &>/dev/null; then
+                            PKGMGR="dnf"
+                        elif command -v yum &>/dev/null; then
+                            PKGMGR="yum"
+                        elif command -v pacman &>/dev/null; then
+                            PKGMGR="pacman"
+                        elif command -v zypper &>/dev/null; then
+                            PKGMGR="zypper"
+                        fi
+                        ;;
+                esac
+            fi
+            ;;
+        *)
+            error "Unsupported OS: $OS"
+            exit 1
+            ;;
+    esac
+
+    debug "Platform: OS=$OS ARCH=$ARCH DISTRO=$DISTRO PKGMGR=$PKGMGR IS_WSL=$IS_WSL"
+}
+
+# ============================================================================
+# Package Installation Helpers
+# ============================================================================
+
+# Check if a command exists
+has_cmd() {
+    command -v "$1" &>/dev/null
+}
+
+# Install packages based on package manager
+pkg_install() {
+    local packages=("$@")
+
+    case "$PKGMGR" in
+        apt)
+            sudo apt update
+            sudo apt install -y "${packages[@]}"
+            ;;
+        dnf)
+            sudo dnf install -y "${packages[@]}"
+            ;;
+        yum)
+            sudo yum install -y "${packages[@]}"
+            ;;
+        pacman)
+            sudo pacman -Syu --noconfirm --needed "${packages[@]}"
+            ;;
+        zypper)
+            sudo zypper install -y "${packages[@]}"
+            ;;
+        brew)
+            brew install "${packages[@]}"
+            ;;
+        *)
+            error "Unknown package manager: $PKGMGR"
+            return 1
+            ;;
+    esac
+}
+
+# Update packages based on package manager
+pkg_update() {
+    case "$PKGMGR" in
+        apt)
+            sudo apt update && sudo apt upgrade -y
+            ;;
+        dnf)
+            sudo dnf upgrade -y
+            ;;
+        yum)
+            sudo yum update -y
+            ;;
+        pacman)
+            sudo pacman -Syu --noconfirm
+            ;;
+        zypper)
+            sudo zypper update -y
+            ;;
+        brew)
+            brew update && brew upgrade
+            ;;
+    esac
+}
+
+# Map package names across distributions
+get_pkg_name() {
+    local pkg="$1"
+
+    case "$pkg" in
+        fd)
+            case "$PKGMGR" in
+                apt) echo "fd-find" ;;
+                dnf|yum) echo "fd-find" ;;
+                *) echo "fd" ;;
+            esac
+            ;;
+        bat)
+            echo "bat"
+            ;;
+        ripgrep)
+            case "$PKGMGR" in
+                *) echo "ripgrep" ;;
+            esac
+            ;;
+        shellcheck)
+            case "$PKGMGR" in
+                dnf|yum) echo "ShellCheck" ;;
+                *) echo "shellcheck" ;;
+            esac
+            ;;
+        *)
+            echo "$pkg"
+            ;;
+    esac
+}
+
+# Install Homebrew on macOS
+install_homebrew() {
+    if ! has_cmd brew; then
+        info "Installing Homebrew..."
+        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+        # Add to PATH for current session
+        if [[ -f /opt/homebrew/bin/brew ]]; then
+            eval "$(/opt/homebrew/bin/brew shellenv)"
+        elif [[ -f /usr/local/bin/brew ]]; then
+            eval "$(/usr/local/bin/brew shellenv)"
+        fi
+        success "Homebrew installed"
+    else
+        success "Homebrew already installed"
+    fi
+}
+
+# Install 1Password CLI
+install_1password_cli() {
+    if has_cmd op; then
+        local op_version
+        op_version=$(op --version 2>/dev/null || echo "unknown")
+        success "1Password CLI already installed (v${op_version})"
+        return 0
+    fi
+
+    info "Installing 1Password CLI..."
+
+    case "$PKGMGR" in
+        apt)
+            # Add 1Password apt repository
+            curl -sS https://downloads.1password.com/linux/keys/1password.asc | \
+                sudo gpg --dearmor --output /usr/share/keyrings/1password-archive-keyring.gpg 2>/dev/null || true
+            echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/1password-archive-keyring.gpg] https://downloads.1password.com/linux/debian/$(dpkg --print-architecture) stable main" | \
+                sudo tee /etc/apt/sources.list.d/1password.list >/dev/null
+            sudo mkdir -p /etc/debsig/policies/AC2D62742012EA22/
+            curl -sS https://downloads.1password.com/linux/debian/debsig/1password.pol | \
+                sudo tee /etc/debsig/policies/AC2D62742012EA22/1password.pol >/dev/null
+            sudo mkdir -p /usr/share/debsig/keyrings/AC2D62742012EA22
+            curl -sS https://downloads.1password.com/linux/keys/1password.asc | \
+                sudo gpg --dearmor --output /usr/share/debsig/keyrings/AC2D62742012EA22/debsig.gpg 2>/dev/null || true
+            sudo apt update && sudo apt install -y 1password-cli
+            ;;
+        dnf|yum)
+            sudo rpm --import https://downloads.1password.com/linux/keys/1password.asc
+            sudo sh -c 'echo -e "[1password]\nname=1Password Stable Channel\nbaseurl=https://downloads.1password.com/linux/rpm/stable/\$basearch\nenabled=1\ngpgcheck=1\nrepo_gpgcheck=1\ngpgkey=https://downloads.1password.com/linux/keys/1password.asc" > /etc/yum.repos.d/1password.repo'
+            if [[ "$PKGMGR" == "dnf" ]]; then
+                sudo dnf install -y 1password-cli
+            else
+                sudo yum install -y 1password-cli
+            fi
+            ;;
+        pacman)
+            if has_cmd yay; then
+                yay -S --noconfirm 1password-cli
+            elif has_cmd paru; then
+                paru -S --noconfirm 1password-cli
+            else
+                warn "Please install 1password-cli from AUR manually (yay -S 1password-cli)"
+                return 1
+            fi
+            ;;
+        brew)
+            brew install --cask 1password-cli
+            ;;
+        zypper)
+            sudo rpm --import https://downloads.1password.com/linux/keys/1password.asc
+            sudo zypper addrepo https://downloads.1password.com/linux/rpm/stable/x86_64 1password
+            sudo zypper install -y 1password-cli
+            ;;
+        *)
+            warn "Cannot auto-install 1Password CLI for $PKGMGR"
+            echo "  Please visit: https://1password.com/downloads/command-line/"
+            return 1
+            ;;
+    esac
+
+    if has_cmd op; then
+        success "1Password CLI installed (v$(op --version))"
+    else
+        error "1Password CLI installation failed"
+        return 1
+    fi
+}
+
+# ============================================================================
+# Commands
+# ============================================================================
+
+cmd_prereq() {
+    local do_update=false
+    local install_op=true
+
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --update|-u)
+                do_update=true
+                shift
+                ;;
+            --no-op)
+                install_op=false
+                shift
+                ;;
+            *)
+                error "Unknown option: $1"
+                echo "Usage: cli prereq [--update] [--no-op]"
+                exit 1
+                ;;
+        esac
+    done
+
+    echo ""
+    echo -e "${BOLD}Installing Prerequisites${RESET}"
+    echo "────────────────────────────────────────"
+    echo ""
+
+    # Detect platform
+    detect_platform
+
+    echo "Platform detected:"
+    echo "  OS:       $(uname -s)"
+    echo "  Arch:     $(uname -m)"
+    echo "  Distro:   ${DISTRO:-unknown}"
+    echo "  Package:  ${PKGMGR:-unknown}"
+    [[ "$IS_WSL" == "true" ]] && echo "  WSL:      yes"
+    echo ""
+
+    # Install Homebrew first on macOS
+    if [[ "$IS_DARWIN" == "true" ]]; then
+        install_homebrew
+    fi
+
+    # Define required packages
+    local -a base_packages=(
+        curl
+        wget
+        git
+        jq
+        unzip
+    )
+
+    local -a optional_packages=(
+        zsh
+        tmux
+        tree
+        htop
+        ripgrep
+    )
+
+    # Add platform-specific package names
+    local -a install_packages=()
+
+    info "Checking base prerequisites..."
+    for pkg in "${base_packages[@]}"; do
+        local pkg_name
+        pkg_name=$(get_pkg_name "$pkg")
+        if ! has_cmd "$pkg"; then
+            install_packages+=("$pkg_name")
+            echo "  ✗ $pkg (will install)"
+        else
+            echo "  ✓ $pkg"
+        fi
+    done
+
+    info "Checking optional prerequisites..."
+    for pkg in "${optional_packages[@]}"; do
+        local pkg_name
+        pkg_name=$(get_pkg_name "$pkg")
+        if ! has_cmd "$pkg"; then
+            install_packages+=("$pkg_name")
+            echo "  ✗ $pkg (will install)"
+        else
+            echo "  ✓ $pkg"
+        fi
+    done
+
+    # Add fd and bat with proper package names
+    if ! has_cmd fd && ! has_cmd fdfind; then
+        install_packages+=("$(get_pkg_name fd)")
+        echo "  ✗ fd (will install)"
+    else
+        echo "  ✓ fd"
+    fi
+
+    if ! has_cmd bat && ! has_cmd batcat; then
+        install_packages+=("$(get_pkg_name bat)")
+        echo "  ✗ bat (will install)"
+    else
+        echo "  ✓ bat"
+    fi
+
+    echo ""
+
+    # Install missing packages
+    if [[ ${#install_packages[@]} -gt 0 ]]; then
+        info "Installing ${#install_packages[@]} packages..."
+        pkg_install "${install_packages[@]}"
+        success "Packages installed"
+    else
+        success "All base packages already installed"
+    fi
+
+    # Create symlinks for fd and bat on Debian/Ubuntu
+    if [[ "$PKGMGR" == "apt" ]]; then
+        mkdir -p ~/.local/bin
+        if [[ -f /usr/bin/fdfind ]] && [[ ! -f ~/.local/bin/fd ]]; then
+            ln -sf /usr/bin/fdfind ~/.local/bin/fd
+            debug "Created symlink: fd -> fdfind"
+        fi
+        if [[ -f /usr/bin/batcat ]] && [[ ! -f ~/.local/bin/bat ]]; then
+            ln -sf /usr/bin/batcat ~/.local/bin/bat
+            debug "Created symlink: bat -> batcat"
+        fi
+    fi
+
+    echo ""
+
+    # Install 1Password CLI
+    if [[ "$install_op" == "true" ]]; then
+        info "Checking 1Password CLI..."
+        install_1password_cli || true
+    fi
+
+    echo ""
+
+    # Update if requested
+    if [[ "$do_update" == "true" ]]; then
+        info "Updating all packages..."
+        pkg_update
+        success "Packages updated"
+        echo ""
+    fi
+
+    # Install chezmoi
+    info "Checking chezmoi..."
+    if has_cmd chezmoi || [[ -x "$CHEZMOI_BIN" ]]; then
+        local chezmoi_version
+        chezmoi_version=$(chezmoi --version 2>/dev/null | head -1 || echo "unknown")
+        success "chezmoi already installed ($chezmoi_version)"
+    else
+        ensure_chezmoi
+    fi
+
+    echo ""
+    echo -e "${BOLD}Summary${RESET}"
+    echo "────────────────────────────────────────"
+    echo ""
+    echo "Core tools:"
+    has_cmd curl && success "curl" || error "curl"
+    has_cmd git && success "git" || error "git"
+    has_cmd jq && success "jq" || error "jq"
+    echo ""
+    echo "1Password:"
+    if has_cmd op; then
+        success "op CLI installed"
+        if op account list &>/dev/null 2>&1; then
+            success "op signed in"
+        else
+            warn "op not signed in (run 'op signin')"
+        fi
+    else
+        error "op CLI not installed"
+    fi
+    echo ""
+    echo "Chezmoi:"
+    has_cmd chezmoi || [[ -x "$CHEZMOI_BIN" ]] && success "chezmoi installed" || error "chezmoi not installed"
+    echo ""
+
+    echo "Next steps:"
+    if ! has_cmd op; then
+        echo "  1. Install 1Password CLI manually if needed"
+    fi
+    if has_cmd op && ! op account list &>/dev/null 2>&1; then
+        echo "  1. Sign in to 1Password: op signin"
+        echo "  2. Setup secrets: ./scripts/setup-1password-secrets.sh"
+    fi
+    echo "  3. Install dotfiles: ./cli install"
+    echo ""
+}
+
+cmd_install() {
+    echo ""
+    echo -e "${BOLD}Installing Dotfiles${RESET}"
+    echo "────────────────────────────────────────"
+    echo ""
+
+    ensure_chezmoi
+
+    # Handle non-interactive mode
+    if [[ ! -t 0 ]]; then
+        info "Non-interactive mode detected, using defaults"
+        create_default_config
+    fi
+
+    if is_local_source; then
+        info "Using local source: ${SCRIPT_DIR}"
+        "$CHEZMOI" init --source "$SCRIPT_DIR"
+    else
+        info "Fetching from: ${REPO}"
+        "$CHEZMOI" init "$REPO"
+    fi
+
+    info "Applying dotfiles..."
+    "$CHEZMOI" apply
+
+    echo ""
+    success "Installation complete!"
+    echo ""
+    echo "Run 'cli status' to see what was installed."
+    echo "Run 'chezmoi diff' to see pending changes."
+    echo ""
+}
+
+cmd_reinstall() {
+    echo ""
+    echo -e "${BOLD}Force Reinstalling Dotfiles${RESET}"
+    echo "────────────────────────────────────────"
+    echo ""
+
+    # Step 1: Clean state
+    info "Cleaning chezmoi state..."
+    rm -rf "$CHEZMOI_SOURCE"
+    rm -f "${CHEZMOI_CONFIG_DIR}/chezmoistate.boltdb"
+
+    # Step 2: Remove external dependencies
+    info "Removing external dependencies..."
+    rm -rf "${HOME}/.local/share/tmux/plugins/tpm"
+    rm -rf "${HOME}/.local/share/zinit"
+    rm -rf "${HOME}/.local/share/nvim/lazy/lazy.nvim"
+    rm -f "${HOME}/.local/bin/fzf"
+    rm -f "${HOME}/.local/bin/nvim.appimage"
+
+    # Step 3: Ensure chezmoi
+    ensure_chezmoi
+
+    # Step 4: Handle non-interactive mode
+    if [[ ! -t 0 ]]; then
+        info "Non-interactive mode detected, using defaults"
+        create_default_config
+    fi
+
+    # Step 5: Initialize
+    info "Initializing chezmoi..."
+    mkdir -p "$CHEZMOI_SOURCE"
+
+    if is_local_source; then
+        info "Copying from local source..."
+        rsync -a --exclude='.git' "${SCRIPT_DIR}/" "$CHEZMOI_SOURCE/"
+        debug "Copied $(find "$CHEZMOI_SOURCE" -type f | wc -l) files"
+    else
+        "$CHEZMOI" init "$REPO" --prompt=false
+    fi
+
+    # Step 6: Apply
+    info "Applying dotfiles..."
+    "$CHEZMOI" apply --force
+
+    # Step 7: Refresh externals
+    info "Refreshing external dependencies..."
+    "$CHEZMOI" apply --refresh-externals 2>&1 || warn "Some externals may have failed"
+
+    echo ""
+    success "Reinstall complete!"
+    echo ""
+    cmd_status
+}
+
+cmd_uninstall() {
+    echo ""
+    echo -e "${BOLD}Uninstalling Dotfiles${RESET}"
+    echo "────────────────────────────────────────"
+    echo ""
+
+    # Confirm unless --force
+    if [[ "${1:-}" != "--force" ]] && [[ -t 0 ]]; then
+        echo -e "${YELLOW}Warning:${RESET} This will remove all chezmoi-managed files."
+        read -p "Continue? [y/N] " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            echo "Aborted."
+            exit 0
+        fi
+    fi
+
+    # Find chezmoi
+    CHEZMOI=""
+    if command -v chezmoi &>/dev/null; then
+        CHEZMOI="chezmoi"
+    elif [[ -x "$CHEZMOI_BIN" ]]; then
+        CHEZMOI="$CHEZMOI_BIN"
+    fi
+
+    if [[ -n "$CHEZMOI" ]]; then
+        info "Removing managed files..."
+        "$CHEZMOI" managed --include=files 2>/dev/null | while read -r file; do
+            target="${HOME}/${file}"
+            if [[ -f "$target" || -L "$target" ]]; then
+                debug "Removing: $target"
+                rm -f "$target"
+            fi
+        done
+
+        info "Removing empty directories..."
+        "$CHEZMOI" managed --include=dirs 2>/dev/null | sort -r | while read -r dir; do
+            target="${HOME}/${dir}"
+            if [[ -d "$target" ]]; then
+                rmdir "$target" 2>/dev/null || true
+            fi
+        done
+    fi
+
+    info "Removing chezmoi source..."
+    rm -rf "$CHEZMOI_SOURCE"
+
+    info "Removing chezmoi config..."
+    rm -rf "$CHEZMOI_CONFIG_DIR"
+
+    info "Removing chezmoi binary..."
+    rm -f "$CHEZMOI_BIN"
+
+    info "Removing external dependencies..."
+    rm -rf "${HOME}/.local/share/tmux/plugins/tpm"
+    rm -rf "${HOME}/.local/share/zinit"
+    rm -rf "${HOME}/.local/share/nvim/lazy/lazy.nvim"
+    rm -f "${HOME}/.local/bin/fzf"
+    rm -f "${HOME}/.local/bin/nvim.appimage"
+    rm -f "${HOME}/.local/bin/nvim"
+
+    echo ""
+    success "Uninstall complete!"
+    echo ""
+    echo "Note: System packages installed by run_once scripts were not removed."
+    echo ""
+}
+
+cmd_status() {
+    echo ""
+    echo -e "${BOLD}Dotfiles Status${RESET}"
+    echo "────────────────────────────────────────"
+    echo ""
+
+    # Check chezmoi
+    if command -v chezmoi &>/dev/null || [[ -x "$CHEZMOI_BIN" ]]; then
+        success "chezmoi installed"
+        CHEZMOI="${CHEZMOI_BIN}"
+        command -v chezmoi &>/dev/null && CHEZMOI="chezmoi"
+    else
+        error "chezmoi not installed"
+        echo ""
+        echo "Run 'cli install' to get started."
+        return 1
+    fi
+
+    # Count managed files
+    local file_count
+    file_count=$("$CHEZMOI" managed --include=files 2>/dev/null | wc -l || echo 0)
+    echo "  Managed files: ${file_count}"
+    echo ""
+
+    echo "External dependencies:"
+    test -d ~/.local/share/tmux/plugins/tpm && success "TPM (Tmux Plugin Manager)" || error "TPM"
+    test -d ~/.local/share/zinit && success "Zinit (Zsh plugin manager)" || error "Zinit"
+    test -d ~/.local/share/nvim/lazy/lazy.nvim && success "Lazy.nvim (Neovim plugins)" || error "Lazy.nvim"
+    test -x ~/.local/bin/fzf && success "fzf" || error "fzf"
+    test -x ~/.local/bin/nvim.appimage && success "Neovim" || error "Neovim"
+    echo ""
+
+    echo "Config files:"
+    test -f ~/.config/zsh/.zshrc && success "zsh" || error "zsh"
+    test -f ~/.config/nvim/init.lua && success "nvim" || error "nvim"
+    test -f ~/.config/tmux/tmux.conf && success "tmux" || error "tmux"
+    test -f ~/.config/git/config && success "git" || error "git"
+    test -f ~/.wezterm.lua && success "wezterm" || error "wezterm"
+    test -f ~/.config/lazygit/config.yml && success "lazygit" || error "lazygit"
+    echo ""
+}
+
+cmd_help() {
+    cat <<'EOF'
+
+  ┌─────────────────────────────────────────────────────────────┐
+  │                     DOTFILES CLI                            │
+  │                                                             │
+  │  Manage your dotfiles with chezmoi                          │
+  └─────────────────────────────────────────────────────────────┘
+
+  USAGE:
+      cli <command> [options]
+
+  COMMANDS:
+      prereq        Install/update prerequisites (curl, git, op, etc.)
+      install       Install dotfiles on a new machine
+      reinstall     Force reinstall (clean slate)
+      uninstall     Remove all managed files
+      status        Show installation status
+      help          Show this help message
+
+  PREREQ OPTIONS:
+      --update      Also update existing packages
+      --no-op       Skip 1Password CLI installation
+
+  QUICK START:
+
+      # On a fresh machine (installs prerequisites first):
+      curl -fsSL https://raw.githubusercontent.com/MrPeterLee/dotfiles/main/cli | bash -s prereq
+      curl -fsSL https://raw.githubusercontent.com/MrPeterLee/dotfiles/main/cli | bash -s install
+
+      # Or clone and run locally:
+      git clone https://github.com/MrPeterLee/dotfiles.git
+      cd dotfiles
+      ./cli install
+
+  COMMON WORKFLOWS:
+
+      # First time setup
+      $ cli install
+
+      # Something broke? Start fresh
+      $ cli reinstall
+
+      # See what chezmoi would change
+      $ chezmoi diff
+
+      # Apply pending changes
+      $ chezmoi apply
+
+      # Edit a managed file
+      $ chezmoi edit ~/.zshrc
+
+      # Add a new file to chezmoi
+      $ chezmoi add ~/.config/some/file
+
+      # Update from remote
+      $ chezmoi update
+
+  ENVIRONMENT VARIABLES:
+      CHEZMOI_REPO     Override GitHub repo (default: MrPeterLee/dotfiles)
+      DOTFILES_DEBUG   Set to 1 for verbose output
+
+  PLATFORM SUPPORT:
+      - Linux: Ubuntu/Debian (apt), Fedora/RHEL (dnf), Amazon Linux (dnf/yum),
+               Arch (pacman), openSUSE (zypper)
+      - macOS: Homebrew (auto-installed if missing)
+      - Windows: WSL (uses Linux package manager)
+
+  KEYBOARD LAYOUT:
+      This config uses Graphite (not QWERTY):
+      y=left  h=down  a=up  e=right  j=end-of-word  l=append  '=yank
+
+  MORE INFO:
+      https://github.com/MrPeterLee/dotfiles
+      https://www.chezmoi.io/
+
+EOF
+}
+
+# ============================================================================
+# Main
+# ============================================================================
+
+main() {
+    local cmd="${1:-help}"
+    shift || true
+
+    case "$cmd" in
+        prereq)     cmd_prereq "$@" ;;
+        install)    cmd_install "$@" ;;
+        reinstall)  cmd_reinstall "$@" ;;
+        uninstall)  cmd_uninstall "$@" ;;
+        status)     cmd_status "$@" ;;
+        help|--help|-h)  cmd_help ;;
+        *)
+            error "Unknown command: $cmd"
+            echo ""
+            echo "Run 'cli help' for usage."
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"

@@ -1,0 +1,218 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# nvim-cli - Cross-platform Neovim installer and config manager
+# Usage: nvim-cli <command>
+# Commands:
+#   delete    - Remove all nvim directories (~/.config/nvim, ~/.local/share/nvim, etc.)
+#   install   - Install nvim binary + stow config + initial plugin sync
+#   reinstall - delete + install
+#   binary    - Install only nvim binary
+#   config    - Install only config via stow (or direct copy on Windows)
+
+DOTFILES_DIR="${DOTFILES_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../" && pwd)}"
+
+# Detect platform
+detect_platform() {
+  case "$(uname -s)" in
+    Linux*)  echo "linux" ;;
+    Darwin*) echo "macos" ;;
+    MINGW*|MSYS*|CYGWIN*) echo "windows" ;;
+    *)       echo "unknown" ;;
+  esac
+}
+
+PLATFORM=$(detect_platform)
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m' # No Color
+
+log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+
+# Delete all nvim-related directories
+cmd_delete() {
+  log_info "Removing Neovim directories..."
+
+  local dirs=(
+    "$HOME/.config/nvim"
+    "$HOME/.local/share/nvim"
+    "$HOME/.local/state/nvim"
+    "$HOME/.cache/nvim"
+  )
+
+  for dir in "${dirs[@]}"; do
+    if [[ -e "$dir" ]]; then
+      rm -rf "$dir"
+      log_info "Removed: $dir"
+    else
+      log_warn "Not found: $dir"
+    fi
+  done
+
+  log_info "Neovim directories removed."
+}
+
+# Install nvim binary only
+cmd_binary() {
+  log_info "Installing Neovim binary for $PLATFORM..."
+
+  case "$PLATFORM" in
+    linux)
+      mkdir -p "$HOME/.local/bin"
+      cd "$HOME/.local/bin"
+      rm -f nvim.appimage nvim 2>/dev/null || true
+      log_info "Downloading nvim.appimage..."
+      wget -q --show-progress https://github.com/neovim/neovim/releases/latest/download/nvim.appimage
+      chmod +x nvim.appimage
+      ln -sf "$HOME/.local/bin/nvim.appimage" "$HOME/.local/bin/nvim"
+      log_info "Neovim installed to ~/.local/bin/nvim"
+      ;;
+    macos)
+      if command -v brew &>/dev/null; then
+        log_info "Installing via Homebrew..."
+        brew install neovim
+      else
+        log_error "Homebrew not found. Please install Homebrew first."
+        exit 1
+      fi
+      ;;
+    windows)
+      if command -v winget &>/dev/null; then
+        log_info "Installing via winget..."
+        winget install Neovim.Neovim
+      elif command -v scoop &>/dev/null; then
+        log_info "Installing via scoop..."
+        scoop install neovim
+      else
+        log_error "Neither winget nor scoop found. Please install one of them."
+        exit 1
+      fi
+      ;;
+    *)
+      log_error "Unsupported platform: $PLATFORM"
+      exit 1
+      ;;
+  esac
+}
+
+# Install config only
+cmd_config() {
+  log_info "Installing Neovim config for $PLATFORM..."
+
+  case "$PLATFORM" in
+    linux|macos)
+      if ! command -v stow &>/dev/null; then
+        log_error "GNU stow not found. Please install stow first."
+        exit 1
+      fi
+      cd "$DOTFILES_DIR"
+      log_info "Running: stow nvim -t ~"
+      stow nvim -t ~
+      log_info "Config installed via stow."
+      ;;
+    windows)
+      local src="$DOTFILES_DIR/nvim/.config/nvim"
+      local dest="$LOCALAPPDATA/nvim"
+      local spell_src="$DOTFILES_DIR/nvim/.local/share/nvim/spell"
+      local spell_dest="$LOCALAPPDATA/nvim-data/spell"
+
+      if [[ ! -d "$src" ]]; then
+        log_error "Source config not found: $src"
+        exit 1
+      fi
+
+      log_info "Copying config to $dest..."
+      mkdir -p "$dest"
+      cp -r "$src"/* "$dest/"
+
+      if [[ -d "$spell_src" ]]; then
+        log_info "Copying spell files to $spell_dest..."
+        mkdir -p "$spell_dest"
+        cp -r "$spell_src"/* "$spell_dest/"
+      fi
+
+      log_info "Config installed via direct copy."
+      ;;
+    *)
+      log_error "Unsupported platform: $PLATFORM"
+      exit 1
+      ;;
+  esac
+}
+
+# Sync plugins
+sync_plugins() {
+  log_info "Syncing plugins (this may take a moment)..."
+  if command -v nvim &>/dev/null; then
+    nvim --headless "+Lazy! sync" +qa 2>/dev/null || true
+    log_info "Plugin sync complete."
+  else
+    log_warn "nvim not found in PATH. Skipping plugin sync."
+  fi
+}
+
+# Full install: binary + config + plugin sync
+cmd_install() {
+  cmd_binary
+  cmd_config
+  sync_plugins
+  log_info "Neovim installation complete!"
+}
+
+# Reinstall: delete + install
+cmd_reinstall() {
+  cmd_delete
+  cmd_install
+}
+
+# Show help
+cmd_help() {
+  cat <<EOF
+nvim-cli - Cross-platform Neovim installer and config manager
+
+Usage: nvim-cli <command>
+
+Commands:
+  delete      Remove all nvim directories
+  install     Install nvim binary + config + sync plugins
+  reinstall   delete + install
+  binary      Install only nvim binary
+  config      Install only config via stow (or direct copy on Windows)
+  help        Show this help message
+
+Platform support:
+  Linux   - AppImage to ~/.local/bin, config via stow
+  macOS   - brew install neovim, config via stow
+  Windows - winget/scoop install, config via direct copy
+
+Environment variables:
+  DOTFILES_DIR - Override dotfiles location (default: auto-detected from script location)
+
+EOF
+}
+
+# Main entry point
+main() {
+  local cmd="${1:-help}"
+
+  case "$cmd" in
+    delete)    cmd_delete ;;
+    install)   cmd_install ;;
+    reinstall) cmd_reinstall ;;
+    binary)    cmd_binary ;;
+    config)    cmd_config ;;
+    help|--help|-h) cmd_help ;;
+    *)
+      log_error "Unknown command: $cmd"
+      cmd_help
+      exit 1
+      ;;
+  esac
+}
+
+main "$@"

@@ -1,0 +1,42 @@
+# README and documentation
+README.md
+AGENTS.md
+CLAUDE.md
+LICENSE
+
+# Git-specific (chezmoi handles .git automatically)
+.gitignore
+.gitattributes
+
+# Platform-specific exclusions
+{{ if not (eq .chezmoi.os "windows") }}
+# Ignore Windows configs on non-Windows
+private_dot_config_windows/
+*.bat
+*.ps1
+*.exe
+{{ end }}
+
+{{ if not (eq .chezmoi.os "darwin") }}
+# Ignore macOS-specific on non-Darwin
+.DS_Store
+{{ end }}
+
+{{ if eq .chezmoi.os "windows" }}
+# On Windows, ignore Unix-specific
+.chezmoiscripts/run_once_before_00-install-packages.sh.tmpl
+.chezmoiscripts/run_once_before_10-install-1password.sh.tmpl
+{{ end }}
+
+# Temporary and cache files
+*.zwc
+.zcompdump*
+*.pyc
+__pycache__/
+.cache/
+*.log
+
+# Editor artifacts
+*.swp
+*.swo
+*~

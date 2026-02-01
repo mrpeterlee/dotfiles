@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch",
+      "Bash",
+      "Edit(*)",
+      "List(*)",
+      "Glob(*)",
+      "Grep(*)",
+      "Read(*)",
+      "Write(*)",
+      "Task(*)",
+      "mcp__*"
+    ],
+    "deny": []
+  },
+  "model": "opus",
+  "enabledPlugins": {
+    "ralph-loop@claude-plugins-official": true,
+    "context7@claude-plugins-official": true,
+    "feature-dev@claude-plugins-official": true,
+    "commit-commands@claude-plugins-official": true,
+    "pr-review-toolkit@claude-plugins-official": true,
+    "superpowers@superpowers-marketplace": true
+  },
+  "thinking": true,
+  "askBeforeRunningTool": false
+}

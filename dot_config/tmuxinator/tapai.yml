@@ -1,0 +1,23 @@
+name: tapai
+root: /lab/paper/tapai
+
+startup_window: "1"
+startup_pane: 1
+
+windows:
+  - Live:
+      layout: main-horizontal
+      panes:
+        - main:
+            - conda activate paper
+
+        - vibe_kanban:
+            - conda activate paper
+            - cd /lab/paper/tapai
+            - PORT=18888 npx vibe-kanban
+
+        # - cron:
+            # - conda activate paper
+            # - cd /lab/lib/ts/cronlab
+            # - ipython
+            # - run cron.tapai.sg.ec2.py

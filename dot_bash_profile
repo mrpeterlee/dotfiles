@@ -1,0 +1,8 @@
+if [ -f ~/.config/bash/bashrc ]; then
+	. ~/.config/bash/bashrc
+fi
+if [ -f ~/.config/bash/bash_alias ]; then
+	. ~/.config/bash/bash_alias
+fi
+
+# . "/home/peter/.local/lib/cargo/env"

@@ -1,0 +1,107 @@
+#  ~/.zshenv
+# Core environmental variables
+# Locations configured here are required for all other files to be correctly imported
+
+# CODEX
+export CODEX_AUTO_APPROVE=1
+
+# Set XDG directories
+export XDG_CONFIG_HOME="${HOME}/.config"
+export XDG_DATA_HOME="${HOME}/.local/share"
+export XDG_BIN_HOME="${HOME}/.local/bin"
+export XDG_LIB_HOME="${HOME}/.local/lib"
+export XDG_CACHE_HOME="/tmp/nvim-cache"
+export XDG_STATE_HOME="${HOME}/.local/state"
+export NVIM_APPNAME="nvim"
+
+# Set default applications
+export EDITOR="nvim"
+{{- if .isDarwin }}
+export TERMINAL="wezterm"
+export BROWSER="open"
+{{- else }}
+export TERMINAL="kitty"
+export BROWSER="firefox"
+{{- end }}
+export PAGER="less"
+
+## Respect XDG directories
+export OPENSSL_DIR="/usr/local/ssl"
+export CARGO_HOME="${XDG_DATA_HOME}/cargo"
+export CURL_HOME="${XDG_CONFIG_HOME}/curl"
+export DOCKER_CONFIG="${XDG_CONFIG_HOME}/docker"
+export GIT_CONFIG="${XDG_CONFIG_HOME}/git/.gitconfig"
+export KDEHOME="${XDG_CONFIG_HOME}/kde"
+export LESSHISTFILE="-" # Disable less history.
+export PASSWORD_STORE_DIR="${XDG_DATA_HOME}/pass"
+export PIP_CONFIG_FILE="${XDG_CONFIG_HOME}/pip/pip.conf"
+export PIP_LOG_FILE="${XDG_DATA_HOME}/pip/log"
+export TMUX_PLUGIN_MANAGER_PATH="${XDG_DATA_HOME}/tmux/plugins"
+export WGETRC="${XDG_CONFIG_HOME}/wget/.wgetrc"
+export XINITRC="${XDG_CONFIG_HOME}/X11/xinitrc"
+export XSERVERRC="${XDG_CONFIG_HOME}/X11/xserverrc"
+export ZDOTDIR="${XDG_CONFIG_HOME}/zsh"
+export ZLIB="${ZDOTDIR}/lib"
+export PYENV_ROOT="$HOME/.pyenv"
+
+# Encodings, languages and misc settings
+export LANG='en_GB.UTF-8'
+export PYTHONIOENCODING='UTF-8'
+export LC_ALL='C'
+
+# ------------------================== Paths ==================------------------ #
+# NOTE: `.zshenv` is sourced for *every* zsh invocation (including subshells).
+# Avoid `PATH=$PATH:...` which causes PATH to grow without bound.
+typeset -U path PATH
+
+{{- if .isWSL }}
+# WSL imports the Windows PATH by default (as `/mnt/<drive>/...` entries).
+# Disable that globally via `/etc/wsl.conf` (`appendWindowsPath=false`) or, if you
+# just want to hide it in zsh, keep this filter enabled.
+if [[ -n "${WSL_DISTRO_NAME-}" && -z "${ZSH_WSL_KEEP_WINDOWS_PATH-}" ]]; then
+  path=(${path:#/mnt/[a-zA-Z]/*})
+fi
+{{- end }}
+
+path+=(
+  "$HOME/.local/bin"
+  "$HOME/bin"
+{{- if .isLinux }}
+  "/lab/lib"
+  "/opt/conda/envs/paper/bin"
+  "/usr/lib/lightdm/lightdm"
+{{- end }}
+  "/usr/local/sbin"
+  "/usr/local/bin"
+  "/usr/sbin"
+  "/usr/bin"
+  "/sbin"
+  "/bin"
+{{- if .isDarwin }}
+  "/opt/homebrew/bin"
+  "/opt/homebrew/sbin"
+{{- end }}
+{{- if .isLinux }}
+  "/usr/games"
+  "/usr/local/games"
+  "/usr/lib/wsl/lib"
+  "/snap/bin"
+  "/lab/lib/finclab/sh/bin"
+  "/lab/lib/finclab/sh/bash"
+  "/lab/lib/finclab/sh/zsh"
+  "/lab/lib/finclab/sh/fish"
+{{- end }}
+  "$HOME/.cargo/bin"
+  "$HOME/.local/share/cargo/bin"
+)
+
+if [[ -n "${GOPATH-}" ]]; then
+  path+=("$GOPATH/bin")
+fi
+
+# Additional cowsay..
+COWPATH=$COWPATH:~/.local/src/cowfiles
+
+if [[ -f "$HOME/.local/share/cargo/env" ]]; then
+  . "$HOME/.local/share/cargo/env"
+fi

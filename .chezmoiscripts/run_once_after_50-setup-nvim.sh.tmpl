@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "==> Setting up Neovim..."
+
+# Create required directories
+mkdir -p "$HOME/.local/share/nvim"
+mkdir -p "$HOME/.local/state/nvim"
+mkdir -p "$HOME/.cache/nvim"
+
+{{ if and .isLinux (not .isDarwin) -}}
+# Create nvim symlink from appimage (Linux only)
+if [[ -f "$HOME/.local/bin/nvim.appimage" ]] && [[ ! -L "$HOME/.local/bin/nvim" ]]; then
+    ln -sf "$HOME/.local/bin/nvim.appimage" "$HOME/.local/bin/nvim"
+fi
+{{ end -}}
+
+# Sync Lazy.nvim plugins (headless)
+if command -v nvim &>/dev/null; then
+    echo "==> Syncing Lazy.nvim plugins..."
+    nvim --headless "+Lazy! sync" +qa 2>/dev/null || true
+
+    echo "==> Updating Mason packages..."
+    nvim --headless "+MasonUpdate" +qa 2>/dev/null || true
+fi
+
+echo "==> Neovim setup complete"

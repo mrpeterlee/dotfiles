@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+#                              ██
+#   ██   ██                   ░██
+#  ░░██ ██   ██████   ███████ ░██  ██
+#   ░░███   ░░░░░░██ ░░██░░░██░██ ██
+#    ░██     ███████  ░██  ░██░████
+#    ██     ██░░░░██  ░██  ░██░██░██
+#   ██     ░░████████ ███  ░██░██░░██
+#  ░░       ░░░░░░░░ ░░░   ░░ ░░  ░░
+#
+# henious edit of an osc52 clipboard script by samoshkin
+# https://github.com/samoshkin/tmux-config/blob/master/tmux/yank.sh
+# this version tries to push to every clipboard it possible can xD
+# cc0 mmxxiii xero (https://x-e.ro | https://git.io/.files)
+
+set -u
+set -o pipefail
+shopt -s extglob
+
+# get data either from stdin or from a file
+buf=$(cat -- "$@")
+
+# bin test
+installed() {
+	type "$1" &>/dev/null
+}
+
+# WSL interop detection (for Windows clipboard tools like clip.exe).
+is_wsl() {
+	[ -n "${WSL_INTEROP-}" ] || [ -n "${WSL_DISTRO_NAME-}" ] || grep -qi microsoft /proc/version 2>/dev/null
+}
+
+# check for local clipboards
+copy_backends=()
+if installed pbcopy; then
+	copy_backends+=("pbcopy")
+fi
+if installed reattach-to-user-namespace; then
+	copy_backends+=("reattach-to-user-namespace pbcopy")
+fi
+if is_wsl && installed win32yank.exe; then
+	copy_backends+=("win32yank.exe -i --crlf")
+fi
+if is_wsl && installed clip.exe; then
+	copy_backends+=("clip.exe")
+fi
+if is_wsl && installed powershell.exe; then
+	copy_backends+=("powershell.exe -NoProfile -Command Set-Clipboard")
+fi
+if [ -n "${WAYLAND_DISPLAY-}" ] && installed wl-copy; then
+	copy_backends+=("wl-copy")
+fi
+if [ -n "${DISPLAY-}" ] && installed xsel; then
+	copy_backends+=("xsel -i")
+fi
+if [ -n "${DISPLAY-}" ] && installed xclip; then
+	copy_backends+=("xclip -i -f -selection primary | xclip -i -selection clipboard")
+fi
+if [ -n "${copy_backend_remote_tunnel_port-}" ] && [ "$(ss -n -4 state listening "( sport = $copy_backend_remote_tunnel_port )" | tail -n +2 | wc -l)" -eq 1 ]; then
+	copy_backends+=("nc localhost $copy_backend_remote_tunnel_port")
+fi
+
+for backend in "${copy_backends[@]}"; do
+	printf "%b" "$buf" | eval "$backend" >/dev/null 2>&1 || true
+done
+
+# copy via OSC 52 ANSI escape sequence to controlling terminal
+# https://sunaku.github.io/tmux-yank-osc52.html
+# The maximum length of an OSC 52 escape sequence is 100_000 bytes, of which
+# 7 bytes are occupied by a "\033]52;c;" header, 1 byte by a "\a" footer, and
+# 99_992 bytes by the base64-encoded result of 74_994 bytes of copyable text
+
+maxlen=74994
+buflen=$(printf %s "$buf" | wc -c)
+# warn if exceeds max
+if [ "$buflen" -gt "$maxlen" ]; then
+	printf "input is %d bytes too long, rip" "$((buflen - maxlen))" >&2
+fi
+
+# build OSC 52 ANSI escape sequence
+esc="\033]52;c;$(printf "%b" "$buf" | head -c $maxlen | base64 | tr -d '\r\n')\a"
+
+# multiplexin? update the eascape sequence
+if (tmux has-session 2>/dev/null); then
+	esc="\033Ptmux;\033$esc\033\\"
+	# send to all terminals \o/
+	for pts in /dev/pts/[0-9]*; do
+		[ -c "$pts" ] || continue
+		printf "%b" "$esc" >"$pts" 2>/dev/null || true
+	done
+else
+	# print that shiz raw
+	printf "%b" "$esc"
+fi

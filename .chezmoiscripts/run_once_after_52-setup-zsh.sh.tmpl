@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "==> Setting up Zsh..."
+
+# Create cache and state directories
+mkdir -p "${XDG_CACHE_HOME:-$HOME/.cache}/zsh"
+mkdir -p "${XDG_STATE_HOME:-$HOME/.local/state}/zsh"
+mkdir -p "${XDG_DATA_HOME:-$HOME/.local/share}/zsh"
+
+{{ if and .isLinux (not .isWSL) -}}
+# Set ZDOTDIR in /etc/zsh/zshenv if writable and not already set
+if [[ -w /etc/zsh/zshenv ]] && ! grep -q 'ZDOTDIR' /etc/zsh/zshenv 2>/dev/null; then
+    echo 'export ZDOTDIR="$HOME/.config/zsh"' | sudo tee -a /etc/zsh/zshenv
+elif [[ -d /etc/zsh ]] && [[ ! -f /etc/zsh/zshenv ]]; then
+    echo 'export ZDOTDIR="$HOME/.config/zsh"' | sudo tee /etc/zsh/zshenv
+fi
+{{ end -}}
+
+# Zinit will self-install on first zsh launch via .zshrc
+# Just ensure the directory exists
+mkdir -p "${XDG_DATA_HOME:-$HOME/.local/share}/zinit"
+
+echo "==> Zsh setup complete"

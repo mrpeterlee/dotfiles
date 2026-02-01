@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:alexop.dev)",
+      "WebFetch(domain:en.bioerrorlog.work)",
+      "WebFetch(domain:www.conventionalcommits.org)"
+    ]
+  }
+}

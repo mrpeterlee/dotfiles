@@ -1,0 +1,253 @@
+# Disabled because time-consuming
+# Example:
+# if command_exists dust; then
+# cargo install du-dust
+# alias du='dust'
+# fi
+
+# command_exists () {
+# hash "$1" 2> /dev/null
+# }
+
+# Disabled because time-consuming
+# Example: if alias_not_used a; then; alias a='alias'; fi
+# alias_not_used () {
+# ! alias "$1" >/dev/null && ! hash "$1" 2> /dev/null
+# }
+
+# Single-letter aliases, for frequently used basics, only if not already set
+alias a='alias'
+# alias c='cd'
+alias d='date'
+alias e='exit'
+alias f='find'
+alias g="git"
+alias h='history'
+alias i='id'
+alias j='jobs'
+alias m='tmuxinator'
+alias p='pj'
+alias s='sudo'
+alias t='tmux'
+alias v='nvim'
+
+alias rg="rg --hidden --glob '!.git'"
+
+alias ipy='ipython --no-autoindent -i ~/.files/python/ipython_startup.py'
+
+alias lg='lazygit' # Lazygit
+
+# Enter the most recently modified directories
+alias latest='cd $(find . -maxdepth 1 -type d -printf "%f\n" | sort | tail -n1)'
+
+# File listing options
+# alias ls='ls --color' # List files in sub-directories, recursivley
+alias lr='ls --color -R'          # List files in sub-directories, recursivley
+alias lf='ls --color -A | rg'     # Use grep to find files
+alias lc='find . -type f | wc -l' # Shows number of files
+alias ld='ls -l | grep "^d"'      # List directories only
+
+alias lm='eza -lahr --color-scale --icons -s=modified' # Recent
+alias lb='eza -lahr --color-scale --icons -s=size'     # Largest / size
+alias tree='ftree() { eza -aF --tree -L=${1:-2} --icons };ftree'
+alias ld='eza -l | grep "^d"' # List directories only
+# alias ls='exa --group-directories-first -l -g --icons --classify --grid'
+alias ls='eza -l --classify --icons --color=always --group-directories-first'
+alias l='eza -lah --group-directories-first -g --icons --classify'
+alias ll='eza -lah --group-directories-first -g --icons --classify'
+alias lt='eza -lah --group-directories-first -g --icons --classify --tree --level=2'
+alias tree='tree --gitignore -I __pycache__ --dirsfirst'
+
+# List contents of packed file, depending on type
+ls-archive() {
+  if [ -z "$1" ]; then
+    echo "No archive specified"
+    return
+  fi
+  if [[ ! -f $1 ]]; then
+    echo "File not found"
+    return
+  fi
+  ext="${1##*.}"
+  if [ $ext = 'zip' ]; then
+    unzip -l $1
+  elif [ $ext = 'rar' ]; then
+    unrar l $1
+  elif [ $ext = 'tar' ]; then
+    tar tf $1
+  elif [ $ext = 'tar.gz' ]; then
+    echo $1
+  elif [ $ext = 'ace' ]; then
+    unace l $1
+  else
+    echo "Unknown Archive Format"
+  fi
+}
+
+alias lz='ls-archive'
+
+# Make directory, and cd into it
+mkcd() {
+  local dir="$*"
+  mkdir -p "$dir" && cd "$dir"
+}
+
+# Make dir and copy
+mkcp() {
+  local dir="$2"
+  local tmp="$2"
+  tmp="${tmp: -1}"
+  [ "$tmp" != "/" ] && dir="$(dirname "$2")"
+  [ -d "$dir" ] ||
+    mkdir -p "$dir" &&
+    cp -r "$@"
+}
+
+# Move dir and move into it
+mkmv() {
+  local dir="$2"
+  local tmp="$2"
+  tmp="${tmp: -1}"
+  [ "$tmp" != "/" ] && dir="$(dirname "$2")"
+  [ -d "$dir" ] ||
+    mkdir -p "$dir" &&
+    mv "$@"
+}
+
+# Getting outa directories
+alias ..='cd ..'
+alias ...='cd ../../'
+alias ....='cd ../../../'
+alias .....='cd ../../../../'
+alias ......='cd ../../../../'
+alias cg='cd `git rev-parse --show-toplevel`' # Base of git project
+
+# Finding files and directories
+alias dud='du -d 1 -h'          # List sizes of files within directory
+alias duf='du -sh *'            # List total size of current directory
+alias ff='find . -type f -name' # Find a file by name within current directory
+
+# Command line history
+alias h='history'                # Shows full history
+alias h-search='fc -El 0 | grep' # Searchses for a word in terminal history
+alias top-history='history 0 | awk '{print $2}' | sort | uniq -c | sort -n -r | head'
+alias histrg='history -500 | rg' # Rip grep search recent history
+
+# Fuzzy search through command history with Ctrl+R
+if [[ ! "$terminfo[kcuu1]" ]]; then
+  bindkey '^R' fzf-history-widget
+fi
+
+fzf-history-widget() {
+  local selected_command=$(fc -rl 1 | fzf --height 40% --reverse --tac | sed -E 's/ *[0-9]+\*? +//')
+  LBUFFER="$selected_command"
+  zle redisplay
+}
+zle -N fzf-history-widget
+
+# Command line head / tail shortcuts
+alias -g H='| head'                   # Pipes output to head (the first part of a file)
+alias -g T='| tail'                   # Pipes output to tail (the last part of a file)
+alias -g G='| grep'                   # Pipes output to grep to search for some word
+alias -g L="| less"                   # Pipes output to less, useful for paging
+alias -g M="| most"                   # Pipes output to more, useful for paging
+alias -g LL="2>&1 | less"             # Writes stderr to stdout and passes it to less
+alias -g CA="2>&1 | cat -A"           # Writes stderr to stdout and passes it to cat
+alias -g NE="2> /dev/null"            # Silences stderr
+alias -g NUL="> /dev/null 2>&1"       # Silences both stdout and stderr
+alias -g P="2>&1| pygmentize -l pytb" # Writes stderr to stdout, and passes to pygmentize
+
+# Use color diff, if availible
+alias diff='diff-so-fancy --colors'
+
+# Find + manage aliases
+alias al='alias | less' # List all aliases
+alias as='alias | rg'   # Search aliases
+alias ar='unalias'      # Remove given alias
+
+# System Monitoring
+alias meminfo='free -m -l -t'                               # Show free and used memory
+alias memhog='ps -eo pid,ppid,cmd,%mem --sort=-%mem | head' # Processes consuming most mem
+alias cpuhog='ps -eo pid,ppid,cmd,%cpu --sort=-%cpu | head' # Processes consuming most cpu
+alias cpuinfo='lscpu'                                       # Show CPU Info
+alias distro='cat /etc/*-release'                           # Show OS info
+alias ports='netstat -tulanp'                               # Show open ports
+
+# Copy / pasting
+alias cpwd='pwd | pbcopy' # Copy current path
+alias pa='pbpaste'        # Paste clipboard contents
+
+# App Specific
+
+# External Services
+alias myip='curl icanhazip.com'
+alias weather='curl wttr.in'
+alias weather-short='curl "wttr.in?format=3"'
+alias cheat='curl cheat.sh/'
+alias tinyurl='curl -s "http://tinyurl.com/api-create.php?url='
+alias joke='curl https://icanhazdadjoke.com'
+alias hackernews='curl hkkr.in'
+alias worldinternet='curl https://status.plaintext.sh/t'
+
+# Random lolz
+alias cls='clear'                                  # Clear
+alias plz="fc -l -1 | cut -d' ' -f2- | xargs sudo" # Re-run last cmd as root
+alias yolo='git add .; git commit -m "YOLO"; git push origin main'
+alias when='date' # Show date
+alias whereami='pwd'
+alias dog='cat'
+alias gtfo='exit'
+
+## Enter the most recently modified directories
+alias latest='cd $(find . -maxdepth 1 -type d -printf "%f\n" | sort | tail -n1)'
+alias paper='cd ${$(pwd):gs/\/lab\/prod/\/lab\/paper} && cd ${$(pwd):gs/\/lab\/dev/\/lab\/paper}'
+alias prod='cd ${$(pwd):gs/\/lab\/paper/\/lab\/prod} && cd ${$(pwd):gs/\/lab\/dev/\/lab\/prod}'
+alias dev='cd ${$(pwd):gs/\/lab\/paper/\/lab\/dev} && cd ${$(pwd):gs/\/lab\/prod/\/lab\/dev}'
+
+# Login to TradeStation (default to paper)
+alias tsprod='ssh -o "UserKnownHostsFile=/dev/null" -o "StrictHostKeyChecking=no" -o "ServerAliveInterval 60" -p 30000 peter@{{ .infra.internal_ip }}'
+alias tspaper='ssh -o "UserKnownHostsFile=/dev/null" -o "StrictHostKeyChecking=no" -o "ServerAliveInterval 60" -p 50000 peter@{{ .infra.internal_ip }}'
+alias lzd='docker run --rm -it -v /var/run/docker.sock:/var/run/docker.sock -v /home/peter/.config/lazydocker:/.config/jesseduffield/lazydocker lazyteam/lazydocker'
+
+# Replacement for ps:: human friendly show processes
+# alias ps='procs'
+
+# Replacement for top:: colorful and human friendly
+alias top='btm'
+
+# Replacement for du:: human friendly show disk usage
+alias du='dust'
+
+alias cat='bat'
+
+alias unbz='tar -jxvf'
+alias ungz='tar -zxvf'
+alias cleanswap='sudo swapoff -a && sudo swapon -a'
+
+# Zsh
+alias viz='nvim ~/.config/zsh/.zshrc'
+alias soz='source ~/.config/zsh/.zshrc'
+
+# Vim
+alias vgd='nvim `git diff --name-only`'
+
+# Docker
+## Show all docker name and port
+alias ddc="docker ps -q | xargs -n 1 docker inspect --format '{{ .Name }} {{range .NetworkSettings.Networks}} {{.IPAddress}}{{end}}' | sed 's#^/##';"
+
+# Time
+alias cal1='ncal -M1b'
+alias cal3='ncal -M3b'
+alias caly='ncal -Myb'
+alias diso='date -I | sed "s/-//g"'
+alias dutc='date -u'
+alias dabs='echo "Day: $(date +%j) - Week: $(date +%V)"'
+
+# Network
+alias ipr='ip route'
+alias ip_public='curl -s icanhazip.com'
+
+alias mux='tmuxinator'
+# ssh copy back to local
+# https://stackoverflow.com/questions/1152362/how-to-send-data-to-local-clipboard-from-a-remote-ssh-session
+alias cb='ssh -p 2222 127.0.0.1 pbcopy'

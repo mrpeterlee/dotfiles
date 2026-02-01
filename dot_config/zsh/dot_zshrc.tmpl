@@ -1,0 +1,499 @@
+#! /usr/bin/env zsh
+# @Author     : Peter Lee
+# @Email      : peter.lee@astrocapital.net
+# @Last Update: 2024-05-16 20:54:16 EDT
+# @Type       : lib
+# @Sensitivity: global_equities@astrocapital.net
+# @Platform   : any
+
+if [ -n "${ZSH_DEBUGRC+1}" ]; then
+  # Check zsh startup performance time using below:
+  # time ZSH_DEBUGRC=1 zsh -i -c exit
+  zmodload zsh/zprof
+fi
+
+# Directory for all-things ZSH config
+zsh_dir=${${ZDOTDIR}:-$HOME/.config/zsh}
+utils_dir="${XDG_CONFIG_HOME}/utils"
+
+# If not running interactively, don't do anything
+[[ $- != *i* ]] && return
+
+# Cached completion (will be deferred later to keep first prompt quick)
+zsh_cache="${XDG_CACHE_HOME:-$HOME/.cache}/zsh"
+zcompdump="${zsh_cache}/.zcompdump"
+mkdir -p "$zsh_cache"
+
+# Enable Powerlevel10k instant prompt. Should stay close to the top of ~/.zshrc.
+# Initialization code that may require console input (password prompts, [y/n]
+# confirmations, etc.) must go above this block; everything else may go below.
+if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
+  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
+fi
+
+# ------------------================== Vim Bindings ==================------------------ #
+
+# The plugin will auto execute this zvm_config function
+zvm_config() {
+  # Retrieve default cursor styles
+  local ncur=$(zvm_cursor_style $ZVM_NORMAL_MODE_CURSOR)
+  local icur=$(zvm_cursor_style $ZVM_INSERT_MODE_CURSOR)
+
+  # Append your custom color for your cursor
+  ZVM_INSERT_MODE_CURSOR=$icur'\e\e]12;red\a'
+  ZVM_NORMAL_MODE_CURSOR=$ncur'\e\e]12;#008800\a'
+
+  # ZVM_VI_INSERT_ESCAPE_BINDKEY=ae
+}
+
+
+# ------------------================== SESSION END ==================------------------ #
+
+
+# Disable Macos
+# if [[ -f "/opt/homebrew/bin/brew" ]] then
+#   # If you're using macOS, you'll want this enabled
+#   eval "$(/opt/homebrew/bin/brew shellenv)"
+# fi
+
+# Set the directory we want to store zinit and plugins
+ZINIT_HOME="${XDG_DATA_HOME:-${HOME}/.local/share}/zinit/zinit.git"
+
+# Download Zinit, if it's not there yet
+if [ ! -d "$ZINIT_HOME" ]; then
+   mkdir -p "$(dirname $ZINIT_HOME)"
+   git clone https://github.com/zdharma-continuum/zinit.git "$ZINIT_HOME"
+fi
+
+# Source/Load zinit
+source "${ZINIT_HOME}/zinit.zsh"
+
+# Prompt: keep eager; everything else should move off the critical path.
+# Speed tip: export POWERLEVEL9K_DISABLE_GITSTATUS=1 to skip repo scans.
+zinit ice depth=1
+zinit light romkatv/powerlevel10k
+
+# Lightweight deferrer that runs tasks *after* the first prompt.
+zinit ice depth=1
+zinit light romkatv/zsh-defer
+command -v zsh-defer >/dev/null 2>&1 || zsh-defer() { "$@"; }
+
+# Core plugins – `wait` defers until after prompt; `lucid` keeps logs quiet.
+zinit ice depth=1 wait lucid
+zinit light-mode for \
+  zsh-users/zsh-autosuggestions
+# Optional (adds compdefs/latency): MichaelAquilina/zsh-you-should-use
+
+# Codex CLI completion (replaces zsh-users/zsh-completions) – defer
+if command -v codex >/dev/null 2>&1; then
+  zsh-defer eval "$(codex completion zsh)"
+fi
+
+# Syntax highlighting should load after other plugins
+zinit ice depth=1 wait=1 lucid atload'_zsh_highlight_bind_widgets'
+zinit light zsh-users/zsh-syntax-highlighting
+# zinit light Aloxaf/fzf-tab
+
+# Add in snippets
+# OMZ snippets are mostly aliases; defer them so they don't block startup.
+zinit ice wait lucid
+zinit snippet OMZL::git.zsh
+zinit snippet OMZP::git
+
+# zinit snippet OMZP::sudo
+# zinit snippet OMZP::archlinux
+# zinit snippet OMZP::aws
+# zinit snippet OMZP::kubectl
+# zinit snippet OMZP::kubectx
+
+# Optional, slow on first miss; keep commented for snappier startup.
+# zinit snippet OMZP::command-not-found
+zinit snippet OMZP::pj
+zinit snippet OMZP::tmux
+zinit snippet OMZP::tmuxinator
+zinit snippet OMZP::rsync
+
+zinit cdreplay -q
+
+# To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
+# [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+
+# Completion styling
+# zstyle ':completion:*' matcher-list 'm:{a-z}={A-Za-z}'
+# zstyle ':completion:*' list-colors "${(s.:.)LS_COLORS}"
+# zstyle ':completion:*' menu no
+# zstyle ':fzf-tab:complete:cd:*' fzf-preview 'ls --color $realpath'
+# zstyle ':fzf-tab:complete:__zoxide_z:*' fzf-preview 'ls --color $realpath'
+
+# To customize prompt, run `p10k configure` or edit ~/.config/zsh/.p10k.zsh.
+[[ ! -f ~/.config/zsh/.p10k.zsh ]] || source ~/.config/zsh/.p10k.zsh
+
+# Defer completion setup to after first prompt
+zsh-defer '
+  autoload -Uz compinit
+  compinit -C -d "$zcompdump"
+  if [[ -s "$zcompdump" && (! -s "${zcompdump}.zwc" || "$zcompdump" -nt "${zcompdump}.zwc") ]]; then
+    zcompile "$zcompdump"
+  fi
+'
+
+# # MacOS-specific services
+# if [ "$(uname -s)" = "Darwin" ]; then
+#   # Add Brew to path, if it's installed
+#   if [[ -d /opt/homebrew/bin ]]; then
+#     export PATH=/opt/homebrew/bin:$PATH
+#   fi
+#
+#   # If using iTerm, import the shell integration if availible
+#   if [[ -f "${XDG_CONFIG_HOME}/zsh/.iterm2_shell_integration.zsh" ]]; then
+#     source "${XDG_CONFIG_HOME}/zsh/.iterm2_shell_integration.zsh"
+#   fi
+# fi
+
+# Source all ZSH config files (if present)
+if [[ -d $zsh_dir ]]; then
+  # Import alias files
+  source ${zsh_dir}/aliases/general.zsh
+  source ${zsh_dir}/aliases/git.zsh
+  # source ${zsh_dir}/aliases/node-js.zsh
+  # source ${zsh_dir}/aliases/rust.zsh
+  source ${zsh_dir}/aliases/tmux.zsh
+  source ${zsh_dir}/aliases/alias-tips.zsh
+  # source ${zsh_dir}/aliases/flutter.zsh
+
+  # Setup Antigen, and import plugins
+  # source ${zsh_dir}/helpers/setup-antigen.zsh
+  # source ${zsh_dir}/helpers/import-plugins.zsh
+  # source ${zsh_dir}/helpers/misc-stuff.zsh
+
+  # Configure ZSH stuff
+  source ${zsh_dir}/lib/colors.zsh
+  source ${zsh_dir}/lib/cursor.zsh
+  source ${zsh_dir}/lib/history.zsh
+  source ${zsh_dir}/lib/surround.zsh
+  source ${zsh_dir}/lib/completion.zsh
+  source ${zsh_dir}/lib/term-title.zsh
+  source ${zsh_dir}/lib/navigation.zsh
+  source ${zsh_dir}/lib/expansions.zsh
+  source ${zsh_dir}/lib/key-bindings.zsh
+fi
+
+# # If using Pyenv, import the shell integration if availible
+# if [[ -d "$PYENV_ROOT" ]] && \
+#   command -v pyenv >/dev/null 2>&1 && \
+#   command -v pyenv-virtualenv-init >/dev/null; then
+#     eval "$(pyenv init -)"
+#     eval "$(pyenv virtualenv-init -)"
+# fi
+
+# Add Zoxide (for cd, quick jump) to shell
+unalias zi
+# zoxide is light; load immediately so `z` works even in non-prompt shells
+if hash zoxide 2> /dev/null; then
+  eval "$(zoxide init zsh)"
+fi
+
+# fzf integrations
+if command -v fzf >/dev/null 2>&1; then
+  zsh-defer 'eval "$(fzf --zsh)"'
+fi
+
+
+# ------------------================== Vim Bindings ==================------------------ #
+bindkey -M vicmd y vi-backward-char
+bindkey -M vicmd h vi-down-line-or-history
+bindkey -M vicmd a vi-up-line-or-history
+bindkey -M vicmd e vi-forward-char 
+
+bindkey -M vicmd l vi-add-next
+bindkey -M vicmd "L" vi-add-eol
+bindkey -M vicmd j vi-forward-word-end
+# bindkey -M vicmd J vi-forward-blank-word-end
+bindkey -M vicmd "'" vi-yank
+bindkey -M vicmd "_" vi-yank-whole-line
+
+# bindkey -M vicmd "y" vi-goto-mark-line
+
+# Add bindings to the vicmd keymap
+# bindkey -a h backward-char
+# bindkey -a e forward-char
+# bindkey -a h down-history
+# bindkey -a a up-history
+
+# ------------------================== SESSION END ==================------------------ #
+
+
+# ------------------================== Configurations ==================------------------ #
+# Handy cross-shell helper
+function setenv() { export "$1=$2"; }
+
+# export TZ=America/New_York
+# export TZ=Asia/Singapore
+export TZ='UTC'
+
+# Set finclab helper path (contains parse_yml)
+finclab_zsh_dir=/lab/lib/finclab/sh/zsh
+if [[ ! -d ${finclab_zsh_dir} && -d /lab/paper/finclab/finclab/sh/zsh ]]; then
+  finclab_zsh_dir=/lab/paper/finclab/finclab/sh/zsh
+fi
+if [[ -d ${finclab_zsh_dir} ]]; then
+  fpath=( /usr/local/bin "${finclab_zsh_dir}" "${fpath[@]}")
+  export PATH="${finclab_zsh_dir}:${PATH}"
+  parse_yml_path="${finclab_zsh_dir}/parse_yml"
+else
+  fpath=( /usr/local/bin "${fpath[@]}")
+fi
+# autoload -Uz parse_yml
+
+# check of os type
+if [[ "$(uname)" == "Darwin" ]]; then
+    # Do something under Mac OS X platform
+    export os_type='mac'
+    # Ensure more number of files to be opened
+    ulimit -S -n 200048
+    # shortcut for Neovide
+    alias gvim='neovide --remote-tcp={{ .infra.internal_ip }}:60001 --nofork --noidle --maximized --multigrid'
+elif [[ "$(expr substr $(uname -s) 1 5)" == "Linux" ]]; then
+    # Do something under GNU/Linux platform
+    export os_type='linux'
+    alias fd=fdfind
+elif [[ "$(expr substr $(uname -s) 1 10)" == "MINGW32_NT" ]]; then
+    # Do something under 32 bits Windows NT platform
+    export os_type='windows'
+elif [[ "$(expr substr $(uname -s) 1 10)" == "MINGW64_NT" ]]; then
+    # Do something under 64 bits Windows NT platform
+    export os_type='windows'
+fi
+
+
+# ------------------================== Rust ==================------------------ #
+# Append Cargo to path, if it's installed
+if [[ -d "$HOME/.cargo/bin" ]]; then
+  export PATH="$HOME/.cargo/bin:$PATH"
+fi
+
+# ------------------================== Python ==================------------------ #
+export PYTHONPATH=/lab/lib:${PYTHONPATH}
+#repos=("finclab" \
+#       "datalab" \
+#       "datalab_utilities" \
+#       "ts" \
+#       "winclient")
+#
+#for repo in $repos; do 
+#    if [ -d ${HOME}/lab/paper/${repo} ]; then
+#        export PYTHONPATH=${HOME}/lab/paper/${repo}:${PYTHONPATH}
+#        echo "Python Path - included additional source lib ${HOME}/lab/paper/${repo}"
+#    else
+#        if [ -d /lab/${repo} ]; then
+#            export PYTHONPATH="/lab/${repo}:${PYTHONPATH}"
+#            echo "Python Path - included additional source lib /lab/${repo}"
+#        fi
+#    fi
+#done
+
+
+# ------------------================== Env Variables ==================------------------ #
+# Grab env variables
+if [ -f "${HOME}/.lab/labenv.yml" ]; then
+    # echo "ENV - Extracted config from 'labenv' (${HOME}/.lab/labenv.yml)..."
+    if [[ -n "${parse_yml_path:-}" && -x "${parse_yml_path}" ]]; then
+      . "${parse_yml_path}" "${HOME}/.lab/labenv.yml" >/dev/null
+    fi
+    # for package in ${HOME}/.lab/*.yml ; do
+    # for package in "${HOME}/.lab/finclab.yml" "${HOME}/.lab/datastore.yml" "${HOME}/.lab/OPENAI.yml" "${HOME}/.lab/github.yml" ; do
+    #     test "$package" = "${HOME}/.lab/labenv.yml" && continue
+    #     filestem=$(basename -s .yml $package)
+    #     echo "Bash ENV - Extracted config from '${filestem}' (${package})..."
+    #     . parse_yml "${package}" "${filestem}_" >/dev/null
+    # done
+fi
+
+
+## ------------------================== Themes ==================------------------ #
+# Ensure zsh tab-complete prompts works correctly
+export LC_ALL=en_US.UTF-8
+export LANG=en_US.UTF-8
+# eval "$(starship init zsh)"
+
+
+# ------------------================== General Settings ==================------------------ #
+# Ensure correct alias of vim to `nvim` or `nvr` (if running inside nvim)
+if [[ ${#${NVIM}} -eq 0 ]]; then
+    # echo "Running in SHELL: ${#${NVIM_LISTEN_ADDRESS}} - $NVIM_LISTEN_ADDRESS"
+    alias v='nvim'
+    alias vim='nvim'
+else
+    # echo "Running inside NVIM: ${#${NVIM_LISTEN_ADDRESS}} - $NVIM_LISTEN_ADDRESS"
+    alias v='nvr -cc "ToggleTerm || vsplit" -c "ToggleTerm" --remote-silent'
+    alias vim='nvr -cc "ToggleTerm || vsplit" -c "ToggleTerm" --remote-silent'
+fi
+
+export HOUSTON_URL=http://{{ .infra.internal_ip }}:1969
+
+export BBG_ROOT=/lab/data/samba/tradestation/data/interim/xbbg
+
+export BOUNDARY_ADDR=https://591797d1-d96c-456a-83fc-fbc97466e643.boundary.hashicorp.cloud
+export VAULT_ADDR={{ .infra.vault_url }}
+
+setopt NO_NOMATCH
+# Allow bash-style inline comments with '#'
+# Shell ergonomics (grouped by feature)
+setopt INTERACTIVE_COMMENTS    # allow inline # comments
+setopt AUTO_MENU               # only show completion menu when needed
+setopt COMPLETE_IN_WORD        # complete from cursor, not just end of line
+setopt AUTO_CD                 # `foo` == `cd foo`
+setopt MULTIOS                 # pipe to multiple outputs
+setopt AUTO_PUSHD PUSHD_MINUS PUSHD_TO_HOME PUSHD_IGNORE_DUPS
+setopt AUTO_NAME_DIRS
+setopt GLOB_COMPLETE NO_CASE_GLOB NUMERIC_GLOB_SORT EXTENDED_GLOB
+setopt RM_STAR_WAIT            # guard against rm *
+setopt ZLE NO_HUP IGNORE_EOF NO_FLOW_CONTROL
+setopt NO_CLOBBER              # avoid clobbering with >
+# arrays expand nicely: ${arr} -> element-wise
+setopt RC_EXPAND_PARAM
+ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=8'
+
+
+# ------------------================== Bindings ==================------------------ #
+# Keybindings
+# bindkey -v
+# bindkey '^p' history-search-backward
+# bindkey '^n' history-search-forward
+# bindkey '^[w' kill-region
+
+# export KEYTIMEOUT=20
+bindkey -s '^o' 'vim $(fzf)^M'
+
+bindkey '^f' autosuggest-accept
+
+# autocomplete CTRL-; to move to the end of auto-suggestions
+# bindkey '^f' end-of-line
+# bindkey '^j' end-of-line
+bindkey '^l' forward-word
+bindkey '^h' backward-word
+
+# Make home and end to work
+bindkey '\e[1~' beginning-of-line
+bindkey '\e[4~' end-of-line
+
+# Incremental search is elite!
+bindkey -M vicmd "/" history-incremental-search-backward
+bindkey -M vicmd "?" history-incremental-search-forward
+
+# Search based on what you typed in already
+bindkey -M vicmd "//" history-beginning-search-backward
+bindkey -M vicmd "??" history-beginning-search-forward
+
+# bindkey "\eOP" run-help
+
+# oh wow!  This is killer...  try it!
+bindkey -M vicmd "q" push-line
+
+# it's like, space AND completion.  Gnarlbot.
+# bindkey -M viins ' ' magic-space
+
+# Navigate in tab autocomplete menu
+# bindkey -M menuselect 'h' vi-backward-char
+# bindkey -M menuselect 'k' vi-up-line-or-history
+# bindkey -M menuselect 'l' vi-forward-char
+# bindkey -M menuselect 'j' vi-down-line-or-history
+
+# Edit line in vim
+autoload edit-command-line; zle -N edit-command-line
+bindkey '^e' edit-command-line
+
+# Enable bracketed-paste-magic
+# autoload -Uz bracketed-paste-magic
+# zle -N bracketed-paste bracketed-paste-magic
+
+# ------------------================== Conda Activation ==================------------------ #
+# Skip if you don't need conda every shell: export DISABLE_CONDA_AUTO=1
+if [ -z "${DISABLE_CONDA_AUTO:-}" ] && { [ -x "/opt/conda/bin/conda" ] || [ -f "/opt/conda/etc/profile.d/conda.sh" ]; }; then
+  zsh-defer '
+    __conda_setup="$('"'"/opt/conda/bin/conda"'"' 'shell.zsh' 'hook' 2> /dev/null)"
+    if [ $? -eq 0 ]; then
+      eval "$__conda_setup"
+    elif [ -f "/opt/conda/etc/profile.d/conda.sh" ]; then
+      . "/opt/conda/etc/profile.d/conda.sh"
+    else
+      export PATH="/opt/conda/bin:$PATH"
+    fi
+    unset __conda_setup
+  '
+fi
+
+# To set activating last env by default, run the below
+# conda config --set auto_activate_base false
+
+# The below is deactivated because .condarc specified the default environment at startup
+# Activate corresponding environment
+# if [ -f /opt/conda/envs/paper/bin/python ]; then
+    # conda activate paper
+    # export PYTHONPATH=/lab/lib:~/lab/lib:$(find /opt/conda/envs/paper -type d -path "*/python*/site-packages" | head -n 1)
+    # echo "Activated env PAPER: $(python --version) @ $(which python)" | lolcat
+# elif [ -f /opt/conda/envs/prod/bin/python ]; then
+    # conda activate prod
+    # export PYTHONPATH=/lab/lib:~/lab/lib:$(find /opt/conda/envs/prod -type d -path "*/python*/site-packages" | head -n 1)
+    # echo "Activated env PROD: $(python --version) @ $(which python)" | lolcat
+# fi
+
+# Config for jupyter_ascending
+export JUPYTER_ASCENDING_EXECUTE_PORT=8888
+
+# ------------------================== Custom Modules ==================------------------ #
+PROJECT_PATHS=( /lab/paper /lab/lean )
+
+# Custom function
+proxy-on() {
+  export http_proxy="http://127.0.0.1:10808"
+  export https_proxy="http://127.0.0.1:10808"
+  export no_proxy="localhost,127.0.0.1,::1,.local,*.local,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.0.0/16"
+  curl -I -v -x http://127.0.0.1:10808 https://www.google.com
+  echo "HTTP proxy on port 10808 (v2ray)"
+  git config --global --unset http.proxy
+  git config --global --unset https.proxy
+  git config --global http.proxy  http://127.0.0.1:10808
+  git config --global https.proxy http://127.0.0.1:10808
+}
+proxy-off() {
+  unset http_proxy https_proxy
+  git config --global --unset http.proxy
+  git config --global --unset https.proxy
+  echo "Proxy off"
+}
+
+
+# ------------------================== Login script ==================------------------ #
+# Cow-spoken fortunes every time you open a terminal
+function cowsayfortune {
+    NUMOFCOWS=`cowsay -l | tail -n +2 | wc -w`
+    WHICHCOW=$((RANDOM%$NUMOFCOWS+1))
+    THISCOW=`cowsay -l | tail -n +2 | sed -e 's/\ /\'$'\n/g' | sed $WHICHCOW'q;d'`
+    #echo "Selected cow: ${THISCOW}, from ${WHICHCOW}"
+    fortune | cowsay -f $THISCOW -W 100
+}
+
+# ------------------================== Yazi Launch Script ==================------------------ #
+function y() {
+	local tmp="$(mktemp -t "yazi-cwd.XXXXXX")" cwd
+	yazi "$@" --cwd-file="$tmp"
+	if cwd="$(command cat -- "$tmp")" && [ -n "$cwd" ] && [ "$cwd" != "$PWD" ]; then
+		builtin cd -- "$cwd"
+	fi
+	rm -f -- "$tmp"
+}
+
+# cowsayfortune | lolcat --spread 1.0
+
+if [ -n "${ZSH_DEBUGRC+1}" ]; then
+  zprof
+fi
+
+export NVM_DIR="$HOME/.config/nvm"
+if [ -s "$NVM_DIR/nvm.sh" ]; then
+  zsh-defer "source '$NVM_DIR/nvm.sh'"  # This loads nvm (after prompt)
+fi
+if [ -s "$NVM_DIR/bash_completion" ]; then
+  zsh-defer "source '$NVM_DIR/bash_completion'"  # nvm bash_completion
+fi

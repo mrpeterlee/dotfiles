@@ -1,0 +1,32 @@
+"$schema" = "https://yazi-rs.github.io/schemas/keymap.json"
+
+# Graphite layout: remap movement to y/h/a/e and preserve yank on '.
+[[mgr.prepend_keymap]]
+on = "y"
+run = "leave"
+desc = "Left (Graphite)"
+
+[[mgr.prepend_keymap]]
+on = "h"
+run = "arrow 1"
+desc = "Down (Graphite)"
+
+[[mgr.prepend_keymap]]
+on = "a"
+run = "arrow -1"
+desc = "Up (Graphite)"
+
+[[mgr.prepend_keymap]]
+on = "e"
+run = "enter"
+desc = "Right/Open (Graphite)"
+
+[[mgr.prepend_keymap]]
+on = "'"
+run = "yank"
+desc = "Yank selected (moved from y)"
+
+[[mgr.prepend_keymap]]
+on = "l"
+run = "create"
+desc = "Create file/dir (Graphite override)"

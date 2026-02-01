@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "==> Installing system packages..."
+
+{{ if eq .pkgmgr "apt" -}}
+sudo apt update
+sudo apt install -y \
+    zsh \
+    tmux \
+    git \
+    curl \
+    wget \
+    jq \
+    tree \
+    htop \
+    ripgrep \
+    fd-find \
+    bat \
+    zoxide \
+    unzip \
+    shellcheck \
+    stow \
+    gpg \
+    fuse
+
+# Create symlinks for fd and bat (Debian/Ubuntu use different names)
+if [[ -f /usr/bin/fdfind ]] && [[ ! -f ~/.local/bin/fd ]]; then
+    mkdir -p ~/.local/bin
+    ln -sf /usr/bin/fdfind ~/.local/bin/fd
+fi
+if [[ -f /usr/bin/batcat ]] && [[ ! -f ~/.local/bin/bat ]]; then
+    mkdir -p ~/.local/bin
+    ln -sf /usr/bin/batcat ~/.local/bin/bat
+fi
+
+{{ else if eq .pkgmgr "brew" -}}
+# Install Homebrew if not present
+if ! command -v brew &>/dev/null; then
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+fi
+
+brew bundle --no-lock --file=/dev/stdin <<EOF
+brew "zsh"
+brew "tmux"
+brew "git"
+brew "curl"
+brew "wget"
+brew "jq"
+brew "tree"
+brew "htop"
+brew "ripgrep"
+brew "fd"
+brew "bat"
+brew "fzf"
+brew "zoxide"
+brew "shellcheck"
+brew "neovim"
+brew "lazygit"
+brew "yazi"
+brew "stow"
+EOF
+
+{{ else if eq .pkgmgr "pacman" -}}
+sudo pacman -Syu --noconfirm --needed \
+    zsh \
+    tmux \
+    git \
+    curl \
+    wget \
+    jq \
+    tree \
+    htop \
+    ripgrep \
+    fd \
+    bat \
+    fzf \
+    zoxide \
+    unzip \
+    shellcheck \
+    neovim \
+    lazygit \
+    yazi \
+    stow \
+    fuse2
+
+{{ else if eq .pkgmgr "dnf" -}}
+sudo dnf install -y \
+    zsh \
+    tmux \
+    git \
+    curl \
+    wget \
+    jq \
+    tree \
+    htop \
+    ripgrep \
+    fd-find \
+    bat \
+    zoxide \
+    unzip \
+    ShellCheck \
+    fuse
+
+{{ end -}}
+
+# Set zsh as default shell if not already
+if [[ "$SHELL" != *"zsh"* ]]; then
+    echo "==> Setting zsh as default shell..."
+    chsh -s "$(which zsh)" || true
+fi
+
+echo "==> Package installation complete"
