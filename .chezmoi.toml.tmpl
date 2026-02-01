@@ -90,6 +90,8 @@
         internal_port = {{ $internalPort | quote }}
         base_domain = {{ $baseDomain | quote }}
 
+sourceDir = {{ joinPath .chezmoi.homeDir ".files" | quote }}
+
 [edit]
     command = "nvim"
 
