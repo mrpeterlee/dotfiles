@@ -771,9 +771,9 @@ cmd_help() {
       curl -fsSL https://raw.githubusercontent.com/MrPeterLee/dotfiles/main/cli | bash -s prereq
       curl -fsSL https://raw.githubusercontent.com/MrPeterLee/dotfiles/main/cli | bash -s install
 
-      # Or clone and run locally:
-      git clone https://github.com/MrPeterLee/dotfiles.git
-      cd dotfiles
+      # Or clone to ~/.files and run locally:
+      git clone https://github.com/MrPeterLee/dotfiles.git ~/.files
+      cd ~/.files
       ./cli install
 
   COMMON WORKFLOWS:

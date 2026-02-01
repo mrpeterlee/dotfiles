@@ -18,9 +18,9 @@ sh -c "$(curl -fsLS get.chezmoi.io)" -- init --apply MrPeterLee
 ### Using the CLI
 
 ```bash
-# Clone and use the CLI
-git clone https://github.com/MrPeterLee/dotfiles.git
-cd dotfiles
+# Clone to ~/.files and use the CLI
+git clone https://github.com/MrPeterLee/dotfiles.git ~/.files
+cd ~/.files
 
 ./cli install      # First-time setup
 ./cli reinstall    # Clean slate reinstall

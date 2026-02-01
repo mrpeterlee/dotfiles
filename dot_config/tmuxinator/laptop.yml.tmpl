@@ -10,7 +10,7 @@ windows:
       panes:
         - terminal:
             - scp -r -P {{ .infra.vpn_port }} peter@{{ .infra.vpn_host }}:/home/peter/.lab $HOME
-            - cd /lab/paper/dotfiles && git pull
+            - cd ~/.files && git pull
             # - cd /lab/paper/finclab && git pull
             # - cd /lab/paper/datalab_utilities && git pull
             # - cd /lab/paper/ts && git pull
@@ -38,7 +38,7 @@ windows:
       layout: even-horizontal
       panes:
         - workspace1:
-            - cd /lab/paper/dotfiles
+            - cd ~/.files
 
   - win-path:
       layout: even-horizontal
@@ -47,5 +47,5 @@ windows:
             - cd /mnt/d/lab/paper/winclient
             - clear
         - dotfiles:
-            - cd /mnt/d/lab/paper/dotfiles
+            - cd /mnt/d/.files
             - clear

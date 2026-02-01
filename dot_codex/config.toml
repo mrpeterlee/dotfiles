@@ -14,7 +14,7 @@ network_access = true
 [projects."/lab/paper/stargaze"]
 trust_level = "trusted"
 
-[projects."/lab/paper/dotfiles"]
+[projects."~/.files"]
 trust_level = "trusted"
 
 [projects."/lab/paper/astronvim"]

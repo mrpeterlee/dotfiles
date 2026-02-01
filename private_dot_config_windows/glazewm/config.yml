@@ -306,7 +306,7 @@ keybindings:
   # [g-'] Launch CMD terminal. ctrl+alternatively, use `shell-exec wt` or
   # `shell-exec %ProgramFiles%/Git/git-bash.exe` to start Windows
   # Terminal and Git Bash respectively.
-  - commands: ["shell-exec D:/lab/paper/dotfiles/wezterm/wezterm.bat"]
+  - commands: ["shell-exec %USERPROFILE%/.files/wezterm/wezterm.bat"]
     bindings: ["shift+ctrl+f13"]
 
   # [g-y,k] Focus the next/previous active workspace defined in `workspaces` config.
