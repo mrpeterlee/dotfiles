@@ -1,0 +1,49 @@
+name: acap-admin
+root: ~/acap
+startup_pane: 1
+
+windows:
+  - acap-1:
+      layout: even-horizontal
+      panes:
+        - acap:
+            - cd ~/acap
+
+  - acap-2:
+      layout: even-horizontal
+      panes:
+        - acap:
+            - cd ~/acap
+
+  - acap-3:
+      layout: even-horizontal
+      panes:
+        - acap:
+            - cd ~/acap
+
+  - acap-4:
+      layout: even-horizontal
+      panes:
+        - acap:
+            - cd ~/acap
+
+  - acap-5:
+      layout: even-horizontal
+      panes:
+        - acap:
+            - cd ~/acap
+
+  - monitor:
+      layout: tiled
+      panes:
+        - glances:
+
+  - background:
+      layout: tiled
+      panes:
+        - bg-task-1:
+            - cd ~/acap
+        - bg-task-2:
+            - cd ~/acap
+
+        #- make -C /lab/prod/labenv start
