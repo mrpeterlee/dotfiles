@@ -242,7 +242,7 @@ The build pipeline runs in this order:
    Packages that aren't on conda-forge (finance APIs, quant libs, etc.). Also includes `awscli`.
 
 3. **NPM tools** (`env/config/npm-tools.txt`) -- `npm install -g` within the env
-   `@anthropic-ai/claude-code`, `@openai/codex`, `wrangler`.
+   `@openai/codex`, `wrangler`.
 
 4. **Custom-index pip packages** (`env/config/pip-custom-indexes.sh`)
    Bloomberg `blpapi` from the private Bloomberg pip index (fails gracefully outside the Bloomberg network).
@@ -250,7 +250,9 @@ The build pipeline runs in this order:
 5. **Standalone CLI binaries** (`env/lib/cli-tools.sh`) -- downloaded into `<prefix>/bin/`
    `gh`, `kubectl`, `argocd`, `helm`, `aliyun`, `yazi`, `sesh`, `twm`, `oh-my-posh`.
 
-6. **System-level tool** -- `op` (1Password CLI) is installed via `cli prereq`, not inside the env.
+6. **System-level tools** -- installed outside the env, available on system PATH
+   `op` (1Password CLI, via `cli prereq`), `claude` (Claude Code, native standalone binary at `~/.local/bin/claude`).
+
 
 ### Adding or removing packages
 
@@ -271,7 +273,7 @@ After every successful build, `_env_cleanup` (in `cli`) removes `acap-*` directo
 - Python is 3.11.x
 - Critical imports: `pandas`, `numpy`, `scipy`, `sqlalchemy`, `loguru`
 - `uv`, `node` binaries present
-- NPM tools present (`claude-code`, `codex`, `wrangler`)
+- NPM tools present (`codex`, `wrangler`)
 - Terminal utilities present (`bat`, `rg`, `fzf`, `zoxide`, `delta`, `eza`, `lazygit`, `tmux`, `nvim`)
 - Standalone CLI tools present (`gh`, `kubectl`, `argocd`, `helm`, `aliyun`, `aws`, `yazi`, `sesh`, `twm`, `oh-my-posh`)
 - `op` available on system PATH

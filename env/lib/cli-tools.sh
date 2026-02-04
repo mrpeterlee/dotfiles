@@ -22,7 +22,6 @@ install_cli_tools() {
     tmp=$(mktemp -d)
     trap "rm -rf '$tmp'" RETURN
 
-    _install_claude   "$bin_dir" "$tmp"
     _install_gh       "$bin_dir" "$arch_go" "$tmp"
     _install_kubectl  "$bin_dir" "$arch_go"
     _install_argocd   "$bin_dir" "$arch_go"
@@ -36,58 +35,6 @@ install_cli_tools() {
     _install_ohmyposh "$bin_dir" "$arch_go"
 
     success "Standalone CLI tools installed"
-}
-
-# ── Claude Code (native binary) ──────────────────────────────────────────────
-
-_install_claude() {
-    local bin_dir="$1" tmp="$2"
-    info "Installing claude..."
-    local gcs_bucket="https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases"
-
-    # Detect platform
-    local arch
-    case "$(uname -m)" in
-        x86_64|amd64) arch="x64" ;;
-        arm64|aarch64) arch="arm64" ;;
-        *) warn "Unsupported architecture for claude: $(uname -m)"; return 0 ;;
-    esac
-    local platform="linux-${arch}"
-
-    # Get latest version
-    local version
-    version=$(curl -fsSL "${gcs_bucket}/latest")
-    if [[ -z "$version" ]]; then
-        warn "Could not determine claude version, skipping"
-        return 0
-    fi
-
-    # Download manifest and verify checksum
-    local manifest
-    manifest=$(curl -fsSL "${gcs_bucket}/${version}/manifest.json")
-    local checksum
-    checksum=$(echo "$manifest" | jq -r ".platforms[\"${platform}\"].checksum // empty")
-    if [[ -z "$checksum" ]]; then
-        warn "Platform ${platform} not found in claude manifest, skipping"
-        return 0
-    fi
-
-    # Download binary
-    local binary_path="${tmp}/claude-binary"
-    curl -fsSL -o "$binary_path" "${gcs_bucket}/${version}/${platform}/claude"
-
-    # Verify checksum
-    local actual
-    actual=$(sha256sum "$binary_path" | cut -d' ' -f1)
-    if [[ "$actual" != "$checksum" ]]; then
-        warn "Claude checksum verification failed, skipping"
-        rm -f "$binary_path"
-        return 0
-    fi
-
-    cp "$binary_path" "${bin_dir}/claude"
-    chmod +x "${bin_dir}/claude"
-    success "claude ${version}"
 }
 
 # ── GitHub CLI (gh) ──────────────────────────────────────────────────────────
