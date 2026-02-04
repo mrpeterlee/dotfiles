@@ -31,6 +31,7 @@ install_cli_tools() {
     _install_sesh     "$bin_dir" "$arch_go" "$arch_alt" "$tmp"
     _install_nvim     "$bin_dir" "$tmp"
     _install_twm      "$prefix" "$bin_dir"
+    _install_aws      "$bin_dir" "$tmp"
     _install_ohmyposh "$bin_dir" "$arch_go"
 
     success "Standalone CLI tools installed"
@@ -229,6 +230,23 @@ _install_twm() {
         warn "twm build failed"
     fi
     export PATH="$saved_path"
+}
+
+# ── AWS CLI v2 ──────────────────────────────────────────────────────────────
+
+_install_aws() {
+    local bin_dir="$1" tmp="$2"
+    info "Installing aws-cli v2..."
+    curl -sLo "${tmp}/awscli.zip" \
+        "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
+    python3 -c "import zipfile,sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" \
+        "${tmp}/awscli.zip" "${tmp}/awscli-extract"
+    "${tmp}/awscli-extract/aws/install" --install-dir "${bin_dir}/../lib/aws-cli" --bin-dir "${bin_dir}" --update 2>&1 | tail -3
+    if [[ -x "${bin_dir}/aws" ]]; then
+        success "aws $("${bin_dir}/aws" --version 2>&1 | awk '{print $1}')"
+    else
+        warn "aws-cli v2 install failed"
+    fi
 }
 
 # ── Oh My Posh (prompt theme engine) ────────────────────────────────────────

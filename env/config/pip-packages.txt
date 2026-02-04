@@ -37,8 +37,5 @@ neovim-remote
 python-dotenv
 nbformat
 
-# Cloud CLI
-awscli
-
 # Microsoft integration
 O365
