@@ -294,6 +294,8 @@ _install_aws() {
         "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
     python3 -c "import zipfile,sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" \
         "${tmp}/awscli.zip" "${tmp}/awscli-extract"
+    # Python zipfile doesn't preserve Unix permissions; restore execute bits
+    chmod -R +x "${tmp}/awscli-extract/aws/"
     "${tmp}/awscli-extract/aws/install" --install-dir "${bin_dir}/../lib/aws-cli" --bin-dir "${bin_dir}" --update 2>&1 | tail -3
     if [[ -x "${bin_dir}/aws" ]]; then
         success "aws $("${bin_dir}/aws" --version 2>&1 | awk '{print $1}')"

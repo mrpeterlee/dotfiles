@@ -68,6 +68,7 @@ path+=(
   "$HOME/bin"
 {{- if .isLinux }}
   "/lab/lib"
+  "/opt/conda/bin"
   "/opt/conda/envs/prod/bin"
   "/usr/lib/lightdm/lightdm"
 {{- end }}
@@ -105,3 +106,4 @@ COWPATH=$COWPATH:~/.local/src/cowfiles
 if [[ -f "$HOME/.local/share/cargo/env" ]]; then
   . "$HOME/.local/share/cargo/env"
 fi
+
