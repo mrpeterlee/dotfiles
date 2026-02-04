@@ -10,8 +10,7 @@ alias g="git"
 alias h='history'
 alias i='id'
 alias j='jobs'
-alias m='tmuxinator'
-alias n='tmuxinator $HOST'
+m() { tmuxinator "$@" "$HOST"; }
 alias p='pj'
 alias s='sudo'
 alias t='tmux'
