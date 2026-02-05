@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ACAP_DIR="$HOME/acap"
+AI_AGENTS_DIR="$ACAP_DIR/.ai_agents"
+
+# Skip gracefully if .ai_agents repo not cloned yet
+if [[ ! -d "$AI_AGENTS_DIR" ]]; then
+    echo "==> Skipping AI agents deploy: $AI_AGENTS_DIR not found"
+    exit 0
+fi
+
+echo "==> Deploying AI agent configuration..."
+
+# --- Parent-level symlinks (~/acap/) ---
+
+# CLAUDE.md
+if [[ ! -L "$ACAP_DIR/CLAUDE.md" ]]; then
+    rm -f "$ACAP_DIR/CLAUDE.md"
+    ln -s .ai_agents/CLAUDE.md "$ACAP_DIR/CLAUDE.md"
+    echo "    Linked CLAUDE.md"
+fi
+
+# AGENTS.md
+if [[ ! -L "$ACAP_DIR/AGENTS.md" ]]; then
+    rm -f "$ACAP_DIR/AGENTS.md"
+    ln -s .ai_agents/AGENTS.md "$ACAP_DIR/AGENTS.md"
+    echo "    Linked AGENTS.md"
+fi
+
+# ~/acap/.claude/rules/ and commands/
+mkdir -p "$ACAP_DIR/.claude"
+
+if [[ ! -L "$ACAP_DIR/.claude/rules" ]]; then
+    rm -rf "$ACAP_DIR/.claude/rules"
+    ln -s ../.ai_agents/claude/rules "$ACAP_DIR/.claude/rules"
+    echo "    Linked .claude/rules/"
+fi
+
+if [[ ! -L "$ACAP_DIR/.claude/commands" ]]; then
+    rm -rf "$ACAP_DIR/.claude/commands"
+    ln -s ../.ai_agents/claude/commands "$ACAP_DIR/.claude/commands"
+    echo "    Linked .claude/commands/"
+fi
+
+# --- Per-project symlinks ---
+
+for project_dir in "$ACAP_DIR"/*/; do
+    # Skip .ai_agents itself and non-git directories
+    [[ "$(basename "$project_dir")" == ".ai_agents" ]] && continue
+    [[ ! -d "$project_dir/.git" ]] && continue
+
+    project_name="$(basename "$project_dir")"
+    mkdir -p "$project_dir/.claude"
+
+    if [[ ! -L "$project_dir/.claude/rules" ]]; then
+        rm -rf "$project_dir/.claude/rules"
+        ln -s ../../.ai_agents/claude/rules "$project_dir/.claude/rules"
+        echo "    Linked $project_name/.claude/rules/"
+    fi
+
+    if [[ ! -L "$project_dir/.claude/commands" ]]; then
+        rm -rf "$project_dir/.claude/commands"
+        ln -s ../../.ai_agents/claude/commands "$project_dir/.claude/commands"
+        echo "    Linked $project_name/.claude/commands/"
+    fi
+done
+
+# --- Codex prompts ---
+
+CODEX_PROMPTS_DIR="$HOME/.codex/prompts"
+mkdir -p "$CODEX_PROMPTS_DIR"
+
+for prompt_file in "$AI_AGENTS_DIR"/codex/prompts/acap-*.md; do
+    [[ ! -f "$prompt_file" ]] && continue
+    prompt_name="$(basename "$prompt_file")"
+    target="$CODEX_PROMPTS_DIR/$prompt_name"
+
+    if [[ ! -L "$target" ]]; then
+        rm -f "$target"
+        ln -s "$prompt_file" "$target"
+        echo "    Linked codex prompt: $prompt_name"
+    fi
+done
+
+echo "==> AI agent configuration deployed."
