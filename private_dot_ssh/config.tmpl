@@ -13,7 +13,26 @@ Host acap-admin
     User peter
     IdentityFile ~/.ssh/acap-admin-key.pem
 
+# Host tapai-admin
+    # HostName 13.251.46.169
+    # User peter
+    # IdentityFile ~/.ssh/tapai-admin-ec2-peterlee.pem
+
+Host bastionhost
+    HostName cudauktdth-public.bastionhost.aliyuncs.com
+    Port 60022
+    User LiWenXu_1
+    IdentityFile ~/.ssh/tapai-peterlee.pem
+
+# Via acap-admin jumphost
 Host tapai-admin
     HostName 13.251.46.169
     User peter
-    IdentityFile ~/.ssh/tapai-admin-ec2-peterlee.pem
+    IdentityFile ~/.ssh/tapai-peterlee.pem
+    ProxyJump acap-admin
+
+# Via BastionHost
+Host tapai-via-bastion
+    HostName aws-singapore-ec2
+    User peter
+    ProxyJump bastionhost

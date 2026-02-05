@@ -120,6 +120,20 @@ map("n", "<C-u>", "<C-u>zz", { noremap = true })
 -- Yank line to ''
 vim.keymap.set("n", "''", "<Cmd>normal! yy<CR>", { noremap = true, silent = true })
 
+-- Make delete operations use system clipboard (since custom clipboard provider
+-- doesn't sync delete operations automatically like yank does)
+map("n", "d", '"+d')
+map("n", "D", '"+D')
+map("n", "x", '"+x')
+map("n", "X", '"+X')
+map("n", "c", '"+c')
+map("n", "C", '"+C')
+map("v", "d", '"+d')
+map("v", "D", '"+D')
+map("v", "x", '"+x')
+map("v", "c", '"+c')
+map("v", "C", '"+C')
+
 -- Remap <A-v> to <C-v> for visual block mode
 vim.api.nvim_set_keymap("n", "<A-v>", "<C-v>", { noremap = true, silent = true })
 

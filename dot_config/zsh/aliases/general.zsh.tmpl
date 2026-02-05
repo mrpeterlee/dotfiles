@@ -10,7 +10,15 @@ alias g="git"
 alias h='history'
 alias i='id'
 alias j='jobs'
-m() { tmuxinator "$@" "$HOST"; }
+m() {
+  if [[ $# -eq 0 ]]; then
+    tmuxinator "$HOST"
+  elif [[ "$1" == "stop" && $# -eq 1 ]]; then
+    tmuxinator stop "$HOST"
+  else
+    tmuxinator "$@"
+  fi
+}
 alias p='pj'
 alias s='sudo'
 alias t='tmux'
