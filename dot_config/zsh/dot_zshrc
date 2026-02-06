@@ -235,8 +235,6 @@ if [[ "$(uname)" == "Darwin" ]]; then
     export os_type='mac'
     # Ensure more number of files to be opened
     ulimit -S -n 200048
-    # shortcut for Neovide
-    alias gvim='neovide --remote-tcp={{ .infra.internal_ip }}:60001 --nofork --noidle --maximized --multigrid'
 elif [[ "$(expr substr $(uname -s) 1 5)" == "Linux" ]]; then
     # Do something under GNU/Linux platform
     export os_type='linux'
@@ -313,12 +311,9 @@ else
     alias vim='nvr -cc "ToggleTerm || vsplit" -c "ToggleTerm" --remote-silent'
 fi
 
-export HOUSTON_URL=http://{{ .infra.internal_ip }}:1969
-
 export BBG_ROOT=/lab/data/samba/tradestation/data/interim/xbbg
 
 export BOUNDARY_ADDR=https://591797d1-d96c-456a-83fc-fbc97466e643.boundary.hashicorp.cloud
-export VAULT_ADDR={{ .infra.vault_url }}
 
 setopt NO_NOMATCH
 # Allow bash-style inline comments with '#'
@@ -480,3 +475,11 @@ fi
 if [ -s "$NVM_DIR/bash_completion" ]; then
   zsh-defer "source '$NVM_DIR/bash_completion'"  # nvm bash_completion
 fi
+
+# pnpm
+export PNPM_HOME="/home/peter/.local/share/pnpm"
+case ":$PATH:" in
+  *":$PNPM_HOME:"*) ;;
+  *) export PATH="$PNPM_HOME:$PATH" ;;
+esac
+# pnpm end
