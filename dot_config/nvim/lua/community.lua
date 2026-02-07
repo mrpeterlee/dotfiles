@@ -6,9 +6,6 @@
 return {
   "AstroNvim/astrocommunity",
 
-  -- wakatime
-  { import = "astrocommunity.media.vim-wakatime" },
-
   -- import/override with your plugins folder
   { import = "astrocommunity.pack.lua" },
   { import = "astrocommunity.pack.python-ruff" },
