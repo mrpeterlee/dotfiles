@@ -54,7 +54,7 @@ validate_env() {
     fi
 
     # Check all CLI tools expected in the env
-    local -a env_cli_tools=(codex wrangler gh kubectl argocd helm aliyun aws bat rg fzf zoxide delta eza lazygit nvim yazi sesh twm oh-my-posh)
+    local -a env_cli_tools=(codex pnpm wrangler gh kubectl argocd helm aliyun aws bat rg fzf zoxide delta eza lazygit nvim yazi sesh twm oh-my-posh)
     for tool in "${env_cli_tools[@]}"; do
         if [[ -x "${prefix}/bin/${tool}" ]]; then
             success "${tool} present"
