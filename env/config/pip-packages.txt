@@ -10,6 +10,7 @@ iexfinance
 pandas-market-calendars
 python-binance
 tushare
+xbbg
 
 # Quant
 lean

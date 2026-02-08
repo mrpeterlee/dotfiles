@@ -74,6 +74,96 @@ ensure_chezmoi() {
     success "chezmoi installed"
 }
 
+# Install miniconda to /opt/conda if not present (Linux only).
+# Requires write access to /opt — on multi-user hosts run as the /opt owner.
+ensure_conda() {
+    local conda_dir="/opt/conda"
+
+    # Only supported on Linux
+    [[ "$(uname -s)" != "Linux" ]] && return 0
+
+    if [[ -x "${conda_dir}/bin/conda" ]]; then
+        debug "Miniconda already installed at ${conda_dir}"
+        return 0
+    fi
+
+    # Check we can write to /opt (or create /opt/conda)
+    local use_sudo=false
+    if mkdir -p "$conda_dir" 2>/dev/null; then
+        # Remove the dir we just created so the installer can create it fresh
+        rmdir "$conda_dir" 2>/dev/null || true
+    elif sudo -n mkdir -p "$conda_dir" 2>/dev/null; then
+        use_sudo=true
+        sudo rmdir "$conda_dir" 2>/dev/null || true
+    else
+        warn "Cannot write to /opt — skipping conda install (run as /opt owner or use sudo)"
+        return 0
+    fi
+
+    info "Installing Miniconda to ${conda_dir}..."
+    local arch
+    arch=$(uname -m)
+    local url="https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-${arch}.sh"
+
+    local tmp
+    tmp=$(mktemp /tmp/miniconda-XXXXXX.sh)
+    curl -fsSLo "$tmp" "$url"
+    chmod +x "$tmp"
+
+    if [[ "$use_sudo" == "true" ]]; then
+        sudo env HOME="$HOME" bash "$tmp" -b -p "$conda_dir"
+        sudo chown -R "$(id -u):$(id -g)" "$conda_dir"
+        # Reclaim ~/.conda created by installer running as root
+        sudo chown -R "$(id -u):$(id -g)" "${HOME}/.conda" 2>/dev/null || true
+    else
+        env -i HOME="$HOME" PATH="/usr/bin:/bin" bash "$tmp" -b -p "$conda_dir"
+    fi
+    rm -f "$tmp"
+
+    # Accept ToS for default channels
+    CONDA_DEFAULT_ENV="" CONDA_PREFIX="" \
+        "${conda_dir}/bin/conda" tos accept \
+            --override-channels --channel https://repo.anaconda.com/pkgs/main 2>/dev/null || true
+    CONDA_DEFAULT_ENV="" CONDA_PREFIX="" \
+        "${conda_dir}/bin/conda" tos accept \
+            --override-channels --channel https://repo.anaconda.com/pkgs/r 2>/dev/null || true
+
+    # Clean stale env registrations
+    mkdir -p "${HOME}/.conda"
+    echo "${conda_dir}" > "${HOME}/.conda/environments.txt"
+
+    # Make world-readable so other users can use the env
+    chmod -R a+rX "$conda_dir"
+    chmod 755 "${conda_dir}/envs" 2>/dev/null || true
+
+    success "Miniconda installed at ${conda_dir}"
+}
+
+# Build the shared conda env if no prod symlink exists yet.
+ensure_conda_env() {
+    local conda_dir="/opt/conda"
+
+    [[ "$(uname -s)" != "Linux" ]] && return 0
+    [[ ! -x "${conda_dir}/bin/conda" ]] && return 0
+
+    if [[ -L "${conda_dir}/envs/prod" ]]; then
+        debug "Conda prod env already exists"
+        return 0
+    fi
+
+    info "Building conda environment (this may take a while)..."
+
+    # Ensure conda is on PATH and no stale env vars interfere
+    export CONDA_DEFAULT_ENV="" CONDA_PREFIX="" CONDA_SHLVL=0
+    export PATH="${conda_dir}/bin:${PATH}"
+
+    cmd_env_build
+
+    # Make world-readable
+    chmod -R a+rX "$conda_dir"
+    chmod 755 "${conda_dir}/envs" 2>/dev/null || true
+}
+
 # Check if running from local source
 is_local_source() {
     [[ -f "${SCRIPT_DIR}/.chezmoi.toml.tmpl" ]]
@@ -761,6 +851,10 @@ cmd_install() {
         "$CHEZMOI" apply
     fi
 
+    # Install conda + shared env (Linux only, skips if already present)
+    ensure_conda
+    ensure_conda_env
+
     # Install essential CLI tools if conda env is not available
     install_essential_tools
 
@@ -819,6 +913,13 @@ cmd_reinstall() {
     # Step 7: Refresh externals
     info "Refreshing external dependencies..."
     "$CHEZMOI" apply --refresh-externals 2>&1 || warn "Some externals may have failed"
+
+    # Step 8: Conda + shared env (Linux only, skips if already present)
+    ensure_conda
+    ensure_conda_env
+
+    # Step 9: Essential CLI tools fallback
+    install_essential_tools
 
     echo ""
     success "Reinstall complete!"
@@ -933,6 +1034,19 @@ cmd_status() {
     test -f ~/.config/git/config && success "git" || error "git"
     test -f ~/.wezterm.lua && success "wezterm" || error "wezterm"
     test -f ~/.config/lazygit/config.yml && success "lazygit" || error "lazygit"
+    echo ""
+
+    echo "Conda environment:"
+    if [[ -x /opt/conda/bin/conda ]]; then
+        success "Miniconda (/opt/conda)"
+    else
+        warn "Miniconda not installed"
+    fi
+    if [[ -L /opt/conda/envs/prod ]]; then
+        success "prod -> $(readlink /opt/conda/envs/prod)"
+    else
+        warn "No prod env (run 'cli env build')"
+    fi
     echo ""
 }
 

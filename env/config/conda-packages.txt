@@ -89,7 +89,6 @@ zipp
 pandas-datareader
 ta
 trading-calendars
-xbbg
 
 # Misc
 ipython

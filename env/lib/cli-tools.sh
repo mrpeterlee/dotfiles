@@ -186,16 +186,22 @@ _install_nvim() {
         warn "Could not determine nvim version, skipping"
         return 0
     fi
-    curl -sLo "${tmp}/nvim-linux-x86_64.tar.gz" \
-        "https://github.com/neovim/neovim/releases/download/${tag}/nvim-linux-x86_64.tar.gz"
-    tar xzf "${tmp}/nvim-linux-x86_64.tar.gz" -C "$tmp"
-    cp "${tmp}/nvim-linux-x86_64/bin/nvim" "${bin_dir}/nvim"
+    local nvim_arch
+    case "$(uname -m)" in
+        x86_64)  nvim_arch="x86_64" ;;
+        aarch64) nvim_arch="arm64" ;;
+        *)       warn "Unsupported arch for nvim: $(uname -m)"; return 0 ;;
+    esac
+    curl -sLo "${tmp}/nvim-linux-${nvim_arch}.tar.gz" \
+        "https://github.com/neovim/neovim/releases/download/${tag}/nvim-linux-${nvim_arch}.tar.gz"
+    tar xzf "${tmp}/nvim-linux-${nvim_arch}.tar.gz" -C "$tmp"
+    cp "${tmp}/nvim-linux-${nvim_arch}/bin/nvim" "${bin_dir}/nvim"
     chmod +x "${bin_dir}/nvim"
     # Also copy runtime files needed by nvim
     local share_dir="${bin_dir}/../share"
-    if [[ -d "${tmp}/nvim-linux-x86_64/share/nvim" ]]; then
+    if [[ -d "${tmp}/nvim-linux-${nvim_arch}/share/nvim" ]]; then
         mkdir -p "${share_dir}"
-        cp -r "${tmp}/nvim-linux-x86_64/share/nvim" "${share_dir}/"
+        cp -r "${tmp}/nvim-linux-${nvim_arch}/share/nvim" "${share_dir}/"
     fi
     success "nvim ${tag}"
 }
@@ -213,9 +219,9 @@ _install_twm() {
         export PATH="$saved_path"
         return 0
     fi
-    # c-compiler conda package provides x86_64-conda-linux-gnu-cc; also try plain cc/gcc
+    # c-compiler conda package provides <arch>-conda-linux-gnu-cc; also try plain cc/gcc
     local conda_cc
-    conda_cc="$(command -v x86_64-conda-linux-gnu-cc 2>/dev/null \
+    conda_cc="$(command -v "$(uname -m)-conda-linux-gnu-cc" 2>/dev/null \
              || command -v cc 2>/dev/null \
              || command -v gcc 2>/dev/null \
              || true)"
@@ -238,8 +244,10 @@ _install_twm() {
 _install_aws() {
     local bin_dir="$1" tmp="$2"
     info "Installing aws-cli v2..."
+    local arch
+    arch=$(uname -m)
     curl -sLo "${tmp}/awscli.zip" \
-        "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
+        "https://awscli.amazonaws.com/awscli-exe-linux-${arch}.zip"
     python3 -c "import zipfile,sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" \
         "${tmp}/awscli.zip" "${tmp}/awscli-extract"
     # Python zipfile doesn't preserve Unix permissions; restore execute bits
